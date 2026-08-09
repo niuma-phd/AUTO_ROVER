@@ -15,7 +15,8 @@ collected. Give it a version and record:
 - the vehicle profile revision and selected VCU-adapter revision;
 - the AUTO_ROVER commit and every external dependency tag or SHA;
 - the route fixture, map, localization source, parameter files, and test area;
-- the test procedure, operator, date, and environmental conditions;
+- the test procedure, planned operator or required operator role, planned test
+  window, and permitted environmental and surface-condition envelope;
 - the measurement source and calculation method for every metric; and
 - the numeric pass criterion for every required field.
 
@@ -65,13 +66,17 @@ ROS-only test.
 ## Results, approval, and decision
 
 Store test results separately from the pre-test profile. Each immutable result
-set references the exact profile version, commit, and blob SHA and records
-completed and aborted runs, every observed metric, machine-readable logs or bag
-data, the exact configuration, summary calculations, failures, reruns, and
-residual risks. Each result is traceable to its source data. Thresholds are never
-edited to fit collected data: a changed vehicle profile, adapter, safety policy,
-route, localization configuration, acceptance criterion, or dependency revision
-requires a new pre-test profile version, approval, and new qualifying runs.
+set references the exact profile version, commit, and blob SHA. Each run records
+its actual operator, timestamp, environmental and surface conditions, completed
+or aborted status, every observed metric, machine-readable logs or bag data,
+exact configuration, summary calculations, failures, reruns, and residual risks.
+Each result is traceable to its source data. A condition outside the approved
+profile envelope invalidates that qualifying run or requires a new approved
+profile and new run; it is never accepted as an undocumented deviation.
+Thresholds are never edited to fit collected data: a changed vehicle profile,
+adapter, safety policy, route, localization configuration, acceptance criterion,
+or dependency revision requires a new pre-test profile version, approval, and
+new qualifying runs.
 
 Phase 1 passes only when every required field has a numeric criterion, every
 required scenario has reproducible evidence, and all criteria pass. A reviewer
