@@ -1244,14 +1244,14 @@ def _validate_workflow(path: Path, root: Path, text: str) -> List[Finding]:
             with_mapping = _direct_mapping(tokens, with_entry[0], duplicate_keys)
             python_version_valid = (
                 set(with_mapping) == {"python-version"}
-                and with_mapping["python-version"][1] == "3.8.20"
+                and with_mapping["python-version"][1] == "3.8.18"
             )
     if not python_version_valid:
         _append_workflow_finding(
             findings,
             relative,
             "WORKFLOW_JOB",
-            "required job is missing Python 3.8.20",
+            "required job is missing Python 3.8.18",
         )
 
     uses_entries = []

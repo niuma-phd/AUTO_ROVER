@@ -119,7 +119,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
-          python-version: \"3.8.20\"
+          python-version: \"3.8.18\"
       - name: Run validator unit tests
         run: python -m unittest discover -s tests/repository -p \"test_*.py\" -v
       - name: Validate repository
@@ -517,7 +517,7 @@ class RepositoryValidatorTests(unittest.TestCase):
         self.assertIn("WORKFLOW_JOB", codes)
 
     def test_workflow_requires_pinned_python_and_validation_commands(self):
-        workflow = WORKFLOW.replace('          python-version: "3.8.20"\n', "")
+        workflow = WORKFLOW.replace('          python-version: "3.8.18"\n', "")
         workflow = workflow.replace(
             "python tools/ci/validate_repository.py --root .",
             "python different_validator.py",
@@ -530,7 +530,7 @@ class RepositoryValidatorTests(unittest.TestCase):
             if item.code == "WORKFLOW_JOB"
         ]
 
-        self.assertTrue(any("Python 3.8.20" in message for message in messages))
+        self.assertTrue(any("Python 3.8.18" in message for message in messages))
         self.assertTrue(any("validate_repository.py" in message for message in messages))
 
     def test_workflow_requires_concurrency_cancellation_shape(self):
