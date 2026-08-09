@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "repository_strategy": "monorepo-first",
+  "autonomy_layers": ["perception", "planning", "control"],
+  "phase_1": {
+    "runtime": {
+      "os": "ubuntu-20.04",
+      "middleware": "ros1-noetic"
+    },
+    "application": "known-map-navigation",
+    "deployment_model": "single-purpose",
+    "route_generation": "off-board",
+    "onboard_planning": "route-plan-to-trajectory",
+    "task_manager": false,
+    "world_model": "reserved-boundary",
+    "local_obstacle_avoidance": false
+  },
+  "migration": {
+    "ros2": "native-after-phase-1",
+    "dual_runtime_phase_1": false
+  },
+  "contracts": {
+    "localization": "EgoState",
+    "route": "RoutePlan",
+    "trajectory": "Trajectory",
+    "control_output": "MotionReference",
+    "chassis_feedback": "ChassisState"
+  },
+  "vehicle_integration": {
+    "universal_cmd_vel": false,
+    "vcu_adapter_required": true,
+    "chassis_feedback_required": true,
+    "preserve_existing_vcu_inner_loop": true
+  }
+}
