@@ -6,8 +6,7 @@ reviewable. Open a pull request with a clear scope, relevant tests, and evidence
 for any changed safety, timing, direction, stop, or vehicle behavior. Squash
 merge is the default.
 
-When both `tools/ci/validate_repository.py` and `tests/repository` are present,
-run these exact checks before opening a pull request:
+Run these exact checks before opening a pull request:
 
 ```text
 python -m unittest discover -s tests/repository -p "test_*.py" -v
@@ -15,10 +14,6 @@ python tools/ci/validate_repository.py --root .
 python -m compileall -q tools/ci tests/repository
 git diff --check
 ```
-
-Until those paths land, run `git diff --check` and the relevant existing tests
-before opening a pull request. This transition is temporary and will be removed
-when the repository validator and repository tests are added.
 
 Public ROS 1 message, service, or action changes need explicit compatibility
 review. A released ROS 1 message cannot receive a semantic or field-layout

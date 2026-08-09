@@ -60,11 +60,17 @@ pull request with relevant test evidence; squash merge is the default. Changes
 to public contracts, safety semantics, module boundaries, dependency direction,
 or supported platform assumptions require an ADR and compatibility review.
 
-Add or update tests before behavior changes. Before every pull request, when
-`tools/ci/validate_repository.py` and `tests/repository` are present, run the
-repository validator and relevant package tests. Until then, run `git diff
---check` and relevant existing tests. This transition is temporary and will be
-removed when those repository checks land.
+Add or update tests before behavior changes. Before every pull request, run:
+
+```text
+python -m unittest discover -s tests/repository -p "test_*.py" -v
+python tools/ci/validate_repository.py --root .
+python -m compileall -q tools/ci tests/repository
+git diff --check
+```
+
+Run all relevant package, replay, integration, and vehicle tests in addition to
+these repository checks.
 
 Pin the Noetic toolchain, base image, apt dependencies, and external source
 revisions. Record external dependencies as reviewed tags or SHAs with license
