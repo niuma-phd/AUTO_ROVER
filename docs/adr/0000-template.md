@@ -3,6 +3,8 @@
 - Status: Proposed
 - Date: YYYY-MM-DD
 - Owners: GitHub usernames
+- Decision authority: GitHub username
+- Approval evidence: Added when the status changes from Proposed
 
 ## Context
 

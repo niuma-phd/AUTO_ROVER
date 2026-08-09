@@ -28,6 +28,23 @@ record must identify any dependency that executes on the vehicle, accepts
 untrusted input, communicates over a network or bus, or participates in a
 safety-relevant path.
 
+## Durable register and approval
+
+Dependency records live in `docs/governance/dependency-register.md`. That file
+is created with the first proposed dependency rather than as an empty stub. It
+contains one stable heading per dependency and the complete field set from the
+table above. The introducing or revision pull request updates the register in
+the same change as the pin, manifest, build, deployment, fixture, or copied
+artifact. Removed dependencies remain in a historical section with the last
+used revision and removal change; records are not silently deleted.
+
+The repository owner, or a dependency maintainer explicitly delegated by the
+owner in the pull request or linked issue, approves each add, revision, or
+removal. License-sensitive changes also require a named license reviewer. The
+register links the approving GitHub review or issue comment and records the
+responsible operational owner. This document is the record schema until a later
+ADR replaces it.
+
 ## Adoption rules
 
 - Prefer a package boundary or thin adapter over copying third-party source
@@ -56,8 +73,8 @@ open-source license has been selected yet, so ordinary copyright law currently
 reserves reuse rights while each external dependency retains its own license.
 
 Before third-party source is copied or modified in the repository, and before
-AUTO_ROVER is distributed under an open-source license, an accepted governance
-decision must establish:
+AUTO_ROVER is distributed under an open-source license, an accepted license ADR
+must establish:
 
 - the intended users and distribution model;
 - compatibility with every recorded dependency and planned contribution;
@@ -66,6 +83,9 @@ decision must establish:
   and
 - the owner and process for ongoing compliance.
 
-That decision adds the actual license text and updates contributor and release
-policy in the same change. A dummy, incomplete, or assumed license file must not
-be added before the gate closes.
+The repository owner is the license decision authority unless the owner
+explicitly delegates that authority in the ADR pull request or linked issue.
+The ADR links the license review and approval evidence. Its implementation adds
+the actual license text and updates contributor, dependency, and release policy
+in the same change. A dummy, incomplete, or assumed license file must not be
+added before the gate closes.

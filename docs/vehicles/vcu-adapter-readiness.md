@@ -20,9 +20,11 @@ evidence; this checklist does not guess them.
   acknowledgement behavior, and malformed-frame handling.
 - [ ] Measure required, minimum, and maximum command rates and feedback rates,
   including startup, reconnect, jitter, and burst behavior.
-- [ ] Document the VCU or firmware watchdog, its timeout and safe-state output,
-  then verify the adapter's independent receiver/output watchdog and local
-  deadline behavior without relying on ROS time alone.
+- [ ] Record whether the VCU or firmware provides a watchdog. If present,
+  characterize and test its timeout and safe-state output. If absent, record
+  that absence, verify the adapter's independent receiver/output watchdog and
+  local deadline behavior without relying on ROS time alone, and obtain an
+  explicit residual-risk disposition.
 
 ## Direction, standstill, and steering
 
@@ -87,8 +89,17 @@ evidence; this checklist does not guess them.
   test results, residual risks, responsible owner, and the versioned phase-1
   acceptance profile.
 
-Readiness requires all applicable boxes, reproducible evidence, and explicit
-review approval. An item may be marked not applicable only with a written reason
-and evidence that the capability cannot affect command execution or safety. A
-fake VCU can validate the architecture, but it cannot establish that a real VCU
-adapter is ready.
+Readiness requires all applicable boxes and reproducible evidence. The
+repository owner, or a vehicle-integration maintainer explicitly delegated by
+the owner in the tracking issue, is the readiness decision authority. That
+authority and the designated safety reviewer record explicit approval in the
+adapter pull request or tracking issue; the evidence record links both
+approvals. In a single-maintainer phase they may be the same named person, but
+the readiness and safety dispositions remain separately recorded.
+
+An item may be marked not applicable only with a written reason and evidence
+that the capability cannot affect command execution or safety. A conditional
+item is instead satisfied by evidence of presence or absence, the required
+compensating controls, and an approved residual-risk disposition. A fake VCU can
+validate the architecture, but it cannot establish that a real VCU adapter is
+ready.

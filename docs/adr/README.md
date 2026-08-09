@@ -12,7 +12,8 @@ An ADR is required before changing any of these areas:
 - safety boundaries;
 - dependency direction;
 - platform strategy;
-- repository extraction.
+- repository extraction;
+- the project license or distribution policy.
 
 ## Numbering and filenames
 
@@ -35,15 +36,26 @@ The only ADR statuses are:
 An ADR starts as `Proposed` and becomes either `Accepted` or `Rejected` through
 review. An accepted ADR becomes `Superseded` only when a later ADR is accepted.
 
+## Decision authority
+
+Only the repository owner, or a maintainer the owner explicitly delegates in
+the ADR pull request or linked issue, may change an ADR from `Proposed` to
+`Accepted` or `Rejected`, or mark an accepted ADR `Superseded`. The ADR names
+that decision authority and links the approving GitHub review or issue comment.
+Specialist architecture, compatibility, safety, vehicle, security, or license
+reviewers may be required by the subject, but they do not acquire decision
+authority merely by contributing to the change.
+
 ## Process
 
 1. Copy the template and assign the next sequential four-digit number.
 2. Describe the context, decision, alternatives, consequences, compatibility or
    migration impact, and verification evidence.
 3. Submit the proposed ADR with the implementation or policy change it governs.
-4. Obtain architecture and compatibility review appropriate to the trigger.
-5. Set the reviewed status. When a new accepted ADR supersedes an earlier one,
-   update both records in the same pull request.
+4. Obtain the specialist reviews required by the trigger and explicit approval
+   from the named decision authority. Record links to that evidence in the ADR.
+5. The decision authority sets the reviewed status. When a new accepted ADR
+   supersedes an earlier one, update both records in the same pull request.
 6. Update every conflicting architecture summary, registry, checklist, policy,
    or other affected document in that same pull request.
 
