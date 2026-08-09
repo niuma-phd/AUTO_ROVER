@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Do not disclose exploitable security vulnerabilities here. Use the repository's private vulnerability reporting link instead.
+        Do not disclose exploitable security vulnerabilities here. Use [GitHub private vulnerability reporting](https://github.com/niuma-phd/AUTO_ROVER/security/advisories/new) instead.
 
   - type: textarea
     id: description

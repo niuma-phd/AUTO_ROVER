@@ -30,20 +30,25 @@ V2 contract and converter.
 ## Safety and vehicle behavior
 
 Describe effects on freshness, watchdogs, limits, stopping, hold, direction or
-gear changes, control enable, fault handling, and emergency stop. State why no
-new hazard is introduced and link the relevant failure-path evidence.
+gear changes, control enable, fault handling, and emergency stop. Identify every
+new or changed hazard, its mitigation and residual risk, and link the recorded
+safety disposition and relevant failure-path evidence.
 
 ## Dependencies and licensing
 
-List added or changed dependencies, reviewed tag or SHA, source URL, license or
-SPDX identifier, modifications, redistribution impact, target-platform fit, and
-responsible owner. Write "None" only when the dependency graph is unchanged.
+For every added, revised, or removed dependency, update the durable
+`docs/governance/dependency-register.md` record in the same change and link it
+here. Include the immutable pin, source, license, modifications, redistribution
+impact, platform/interface/maintenance evidence, operational owner, and the
+recorded dependency-owner and license-review approvals. Write "None" only when
+the dependency graph and redistributed artifacts are unchanged.
 
 ## Documentation and decision record
 
 List changed architecture, interface, vehicle, test, deployment, and operator
 documentation. Link the ADR when this changes a public interface, safety
-boundary, dependency direction, platform strategy, or repository extraction.
+boundary, dependency direction, platform strategy, repository extraction, or
+the project license or distribution policy.
 
 ## Required confirmations
 
