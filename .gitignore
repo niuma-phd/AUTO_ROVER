@@ -1,0 +1,32 @@
+# Catkin and CMake
+/build/
+/devel/
+/install/
+/log/
+/.catkin_tools/
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+/.venv/
+/venv/
+/env/
+
+# IDE and operating system
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Runtime data and generated artifacts
+/runtime/logs/
+/data/recordings/
+/data/captures/
+/generated/maps/

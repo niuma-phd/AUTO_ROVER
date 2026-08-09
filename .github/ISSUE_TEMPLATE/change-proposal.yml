@@ -1,0 +1,69 @@
+name: Change proposal
+description: Propose a scoped architecture, interface, behavior, tooling, or process change.
+title: "[Proposal]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the concrete problem and evidence that it is worth solving now.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposed_outcome
+    attributes:
+      label: Proposed outcome
+      description: Describe the observable outcome without prematurely prescribing an implementation.
+    validations:
+      required: true
+
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope
+      description: Identify the modules, application composition, platform, vehicle profile, and delivery phase in scope.
+    validations:
+      required: true
+
+  - type: textarea
+    id: non_goals
+    attributes:
+      label: Non-goals
+      description: State what this proposal deliberately will not add or change.
+    validations:
+      required: true
+
+  - type: textarea
+    id: affected_contracts_layers
+    attributes:
+      label: Affected contracts and layers
+      description: List affected interfaces, autonomy layers, vehicle/safety boundaries, dependency direction, and compatibility impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety_impact
+    attributes:
+      label: Safety impact
+      description: Explain effects on freshness, limits, stopping, hold, direction changes, enable/fault handling, E-stop, and fail-closed behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Summarize viable alternatives, including reuse of a bounded upstream package or leaving the system unchanged.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_evidence
+    attributes:
+      label: Acceptance evidence
+      description: Define the tests, replay, simulation, measurements, compatibility proof, and documentation that would establish completion.
+    validations:
+      required: true

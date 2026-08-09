@@ -1,6 +1,6 @@
 # AUTO_ROVER Architecture Design Baseline
 
-- Status: approved in discussion; awaiting review of this written baseline
+- Status: approved in discussion and written review
 - Date: 2026-08-10
 - Initial runtime: Ubuntu 20.04 + ROS 1 Noetic
 - Future runtime: a native ROS 2 implementation on a supported ROS 2 LTS

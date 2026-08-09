@@ -1,0 +1,98 @@
+name: Bug report
+description: Report a reproducible AUTO_ROVER defect that is not a confidential security vulnerability.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not disclose exploitable security vulnerabilities here. Use [GitHub private vulnerability reporting](https://github.com/niuma-phd/AUTO_ROVER/security/advisories/new) instead.
+
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Describe the defect and its impact.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Give the smallest repeatable sequence, route, configuration, recording, or command that demonstrates the problem.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: State the expected result, including relevant safety or timing behavior.
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: State what happened and whether the result is deterministic.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: affected_layer
+    attributes:
+      label: Affected layer or boundary
+      options:
+        - Perception
+        - Planning
+        - Control
+        - Vehicle integration or VCU adapter
+        - Safety
+        - Interfaces or ROS conversions
+        - Application, deployment, tooling, or CI
+        - Multiple or unknown
+    validations:
+      required: true
+
+  - type: input
+    id: platform
+    attributes:
+      label: Platform
+      description: Record operating system, ROS distribution, vehicle or simulator profile, and relevant hardware.
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Version or commit
+      description: Give the AUTO_ROVER commit and relevant dependency or adapter revisions.
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs and evidence
+      description: Attach sanitized logs, bag or fixture references, screenshots, traces, and configuration needed to reproduce the defect.
+
+  - type: dropdown
+    id: safety_impact
+    attributes:
+      label: Safety impact
+      options:
+        - No known safety impact
+        - Potential impact on commands, stopping, direction, timing, or vehicle behavior
+        - Confirmed impact; affected vehicle operation must stop pending review
+        - Unknown; safety review is required
+    validations:
+      required: true
+
+  - type: textarea
+    id: safety_details
+    attributes:
+      label: Safety details
+      description: Describe the hazard, operating conditions, current mitigation, and fail-closed outcome when applicable.
