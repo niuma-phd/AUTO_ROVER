@@ -1,0 +1,5 @@
+expected_frame_id: camera_init
+sampling_resolution_m: 0.05
+trajectory_valid_for_ns: 300000000
+publish_period_s: 0.10
+scope: deterministic_software_and_initial_commissioning

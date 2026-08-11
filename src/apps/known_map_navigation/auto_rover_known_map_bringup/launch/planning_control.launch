@@ -1,0 +1,29 @@
+<launch>
+  <arg name="waypoints_file"
+       default="$(find auto_rover_known_map_bringup)/config/waypoints.yaml" />
+  <arg name="planning_config"
+       default="$(find auto_rover_known_map_bringup)/config/planning.yaml" />
+  <arg name="control_config"
+       default="$(find auto_rover_known_map_bringup)/config/control.yaml" />
+  <arg name="vehicle_runtime_config"
+       default="$(find auto_rover_known_map_bringup)/config/vehicle_runtime.yaml" />
+
+  <node pkg="auto_rover_planning"
+        type="route_planner_node"
+        name="route_planner"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg planning_config)" />
+    <rosparam command="load" file="$(arg vehicle_runtime_config)" />
+    <param name="waypoints_file" value="$(arg waypoints_file)" />
+  </node>
+
+  <node pkg="auto_rover_control"
+        type="pure_pursuit_node"
+        name="pure_pursuit"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg control_config)" />
+    <rosparam command="load" file="$(arg vehicle_runtime_config)" />
+  </node>
+</launch>

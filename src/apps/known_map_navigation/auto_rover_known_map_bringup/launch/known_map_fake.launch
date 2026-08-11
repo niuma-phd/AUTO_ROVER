@@ -1,0 +1,51 @@
+<launch>
+  <!-- Deterministic software-only Phase-1 composition. The fake localization
+       fixture uses an explicit -0.20 m source-to-rear transform, so the loop
+       never relies on an identity-extrinsic fallback. -->
+  <arg name="localization_config"
+       default="$(find auto_rover_known_map_bringup)/config/localization_fake_test.yaml" />
+  <arg name="waypoints_file"
+       default="$(find auto_rover_known_map_bringup)/config/waypoints.yaml" />
+  <arg name="planning_config"
+       default="$(find auto_rover_known_map_bringup)/config/planning.yaml" />
+  <arg name="control_config"
+       default="$(find auto_rover_known_map_bringup)/config/control.yaml" />
+  <arg name="vehicle_runtime_config"
+       default="$(find auto_rover_known_map_bringup)/config/vehicle_runtime.yaml" />
+  <arg name="safety_config"
+       default="$(find auto_rover_known_map_bringup)/config/safety_fake.yaml" />
+  <arg name="actuation_enabled" default="false" />
+
+  <include file="$(find auto_rover_known_map_bringup)/launch/localization.launch">
+    <arg name="localization_config" value="$(arg localization_config)" />
+  </include>
+
+  <include file="$(find auto_rover_known_map_bringup)/launch/planning_control.launch">
+    <arg name="waypoints_file" value="$(arg waypoints_file)" />
+    <arg name="planning_config" value="$(arg planning_config)" />
+    <arg name="control_config" value="$(arg control_config)" />
+    <arg name="vehicle_runtime_config" value="$(arg vehicle_runtime_config)" />
+  </include>
+
+  <include file="$(find auto_rover_known_map_bringup)/launch/vehicle_execution.launch">
+    <arg name="safety_config" value="$(arg safety_config)" />
+    <arg name="vehicle_runtime_config" value="$(arg vehicle_runtime_config)" />
+    <arg name="actuation_enabled" value="$(arg actuation_enabled)" />
+  </include>
+
+  <node pkg="auto_rover_known_map_bringup"
+        type="fake_fast_livo_source.py"
+        name="fake_fast_livo_source"
+        output="screen"
+        required="true"
+        clear_params="true">
+    <param name="publish_rate_hz" value="20.0" type="double" />
+    <param name="feedback_freshness_s" value="0.20" type="double" />
+    <param name="initial_rear_x_m" value="0.0" type="double" />
+    <param name="initial_rear_y_m" value="0.0" type="double" />
+    <param name="initial_rear_yaw_rad" value="0.0" type="double" />
+    <param name="source_to_rear_x_m" value="-0.20" type="double" />
+    <param name="source_to_rear_y_m" value="0.0" type="double" />
+    <param name="source_to_rear_yaw_rad" value="0.0" type="double" />
+  </node>
+</launch>

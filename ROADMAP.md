@@ -8,7 +8,9 @@ and ROS 1 Noetic only.
 
 Establish the monorepo documentation, decision records, ownership rules, pinned
 Noetic toolchain, and baseline CI. Keep the repository free of empty ROS and
-ROS 2 packages. No public source license is selected yet.
+ROS 2 packages. Apache-2.0 is the selected project license under
+[ADR 0005](docs/adr/0005-apache-2.0-license-and-reusable-module-publication.md);
+external material remains subject to its own reviewed license.
 
 ## 2. Contracts and core
 
@@ -52,16 +54,17 @@ field coverage, and native ROS 2 each require their own approved design and do
 not expand phase 1. They may reuse the established trajectory and vehicle
 boundaries but do not justify a runtime task manager in the current system.
 
-## Future repository split — proposals only
+## Reusable-module publication
 
-AUTO_ROVER remains the integration and acceptance monorepo unless a later ADR
-approves extraction. Proposed future names are `auto-rover-interfaces`,
-`auto-rover-perception`, `auto-rover-planning`, `auto-rover-control`,
-`auto-rover-vehicle`, and optionally `auto-rover-tools` and `auto-rover-safety`.
-They are neither created nor committed plans.
+[ADR 0005](docs/adr/0005-apache-2.0-license-and-reusable-module-publication.md)
+authorizes curated, public source repositories for reviewed reusable ROS
+packages. AUTO_ROVER remains the canonical integration and vehicle-acceptance
+source; an initial package repository is a commit-pinned publication, not an
+independent compatibility or safety release.
 
-An extraction proposal must show a stable interface across at least two system
-releases, independent build and test, mostly independent changes, and an
-independent consumer, maintainer, or release cadence. A placeholder world model,
-a one-VCU integration, or frequently coupled planning/control APIs do not meet
-that bar.
+Every export must include package-specific source, tests, documentation, and
+Apache-2.0 licensing, and must exclude vehicle deployment, field evidence,
+vendor firmware, copied third-party source, generated artifacts, and unreviewed
+material. Independent release authority or divergent development still requires
+a later ADR with stable interfaces, independent build and test, and an explicit
+maintainer and compatibility policy.

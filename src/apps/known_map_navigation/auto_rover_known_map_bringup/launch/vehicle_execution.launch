@@ -1,0 +1,23 @@
+<launch>
+  <!-- Phase-1 vehicle execution is deliberately fake-only. This launch has
+       no physical transport selection and actuation remains disabled unless
+       a caller explicitly opts in for a deterministic software test. -->
+  <arg name="safety_config"
+       default="$(find auto_rover_known_map_bringup)/config/safety_fake.yaml" />
+  <arg name="vehicle_runtime_config"
+       default="$(find auto_rover_known_map_bringup)/config/vehicle_runtime.yaml" />
+  <arg name="actuation_enabled" default="false" />
+
+  <node pkg="auto_rover_vehicle"
+        type="vehicle_execution_node"
+        name="vehicle_execution"
+        output="screen"
+        required="true"
+        clear_params="true">
+    <rosparam command="load" file="$(arg safety_config)" />
+    <rosparam command="load" file="$(arg vehicle_runtime_config)" />
+    <param name="safety_supervisor/actuation_enabled"
+           value="$(arg actuation_enabled)"
+           type="bool" />
+  </node>
+</launch>

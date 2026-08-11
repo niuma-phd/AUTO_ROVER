@@ -1,0 +1,1166 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>AUTO_ROVER NUC Ackermann Phase-1 软件架构与实现说明</title>
+  <style>
+    :root {
+      --bg: #f4f7f8;
+      --panel: #ffffff;
+      --ink: #172126;
+      --muted: #52636b;
+      --line: #cbd7dc;
+      --accent: #116466;
+      --accent-soft: #e2f3f1;
+      --blue: #1e5aa8;
+      --blue-soft: #e8f0fb;
+      --pass: #17663a;
+      --pass-bg: #dff3e6;
+      --unverified: #805500;
+      --unverified-bg: #fff1c9;
+      --blocked: #982b2b;
+      --blocked-bg: #fde2e2;
+      --code: #edf2f4;
+      --shadow: 0 10px 30px rgba(20, 42, 52, 0.08);
+      --radius: 14px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      background: var(--bg);
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 0%, rgba(17, 100, 102, 0.10), transparent 30rem),
+        linear-gradient(180deg, #f9fbfb 0, var(--bg) 34rem);
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+        "Noto Sans CJK SC", "Microsoft YaHei", sans-serif;
+      font-size: 16px;
+      line-height: 1.72;
+    }
+
+    a { color: var(--blue); text-underline-offset: 0.18em; }
+    a:hover { text-decoration-thickness: 2px; }
+    code, pre, .mono {
+      font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+    }
+    code {
+      padding: 0.08em 0.32em;
+      border-radius: 0.32em;
+      background: var(--code);
+      overflow-wrap: anywhere;
+    }
+    pre {
+      overflow: auto;
+      padding: 1rem 1.1rem;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: var(--code);
+      color: var(--ink);
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 32px 0 72px;
+    }
+
+    .hero {
+      padding: clamp(24px, 5vw, 54px);
+      color: #f8ffff;
+      background: linear-gradient(135deg, #103f48, #116466 58%, #1d7874);
+      border-radius: 20px;
+      box-shadow: var(--shadow);
+    }
+    .hero p { max-width: 76ch; margin-bottom: 0; color: #dcefed; }
+    .hero code { color: #17343a; background: #e7f1f1; }
+    .eyebrow {
+      margin: 0 0 0.5rem;
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: #a9e1dc;
+    }
+    h1 {
+      max-width: 22ch;
+      margin: 0;
+      font-size: clamp(2rem, 5vw, 4.4rem);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+    }
+    .hero-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.6rem 1.2rem;
+      margin-top: 1.4rem;
+      font-size: 0.9rem;
+      color: #dcefed;
+    }
+
+    nav {
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      margin: 18px 0 28px;
+      padding: 0.75rem 1rem;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: rgba(255,255,255,0.94);
+      box-shadow: 0 5px 18px rgba(20, 42, 52, 0.07);
+      backdrop-filter: blur(10px);
+    }
+    nav ul {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem 1rem;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    nav a { font-size: 0.9rem; font-weight: 650; text-decoration: none; }
+
+    main > section {
+      margin: 26px 0;
+      padding: clamp(22px, 4vw, 42px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+    h2 {
+      margin: 0 0 1rem;
+      font-size: clamp(1.45rem, 3vw, 2.15rem);
+      line-height: 1.25;
+      letter-spacing: -0.02em;
+    }
+    h3 { margin: 1.7rem 0 0.6rem; font-size: 1.18rem; }
+    h4 { margin: 1.25rem 0 0.45rem; }
+    p { margin: 0.65rem 0; }
+    ul, ol { padding-left: 1.35rem; }
+    li + li { margin-top: 0.34rem; }
+    .lead { max-width: 84ch; font-size: 1.08rem; color: #31464e; }
+    .muted { color: var(--muted); }
+    .small { font-size: 0.88rem; }
+
+    .status-row, .grid-2, .grid-3, .package-grid, .repo-grid {
+      display: grid;
+      gap: 14px;
+    }
+    .status-row { grid-template-columns: repeat(3, 1fr); }
+    .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .package-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .repo-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+
+    .card {
+      min-width: 0;
+      padding: 1rem 1.05rem;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: #fbfcfc;
+    }
+    .card h3, .card h4 { margin-top: 0; }
+    .card > :last-child { margin-bottom: 0; }
+    .card-accent { border-left: 5px solid var(--accent); }
+    .card-blue { border-left: 5px solid var(--blue); }
+    .card-warning { border-left: 5px solid #c2830b; }
+    .card-danger { border-left: 5px solid var(--blocked); }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35em;
+      margin-right: 0.35em;
+      padding: 0.22em 0.58em;
+      border: 1px solid currentColor;
+      border-radius: 999px;
+      font-size: 0.74rem;
+      font-weight: 850;
+      letter-spacing: 0.035em;
+      line-height: 1.3;
+      white-space: nowrap;
+    }
+    .pass { color: var(--pass); background: var(--pass-bg); }
+    .unverified { color: var(--unverified); background: var(--unverified-bg); }
+    .blocked { color: var(--blocked); background: var(--blocked-bg); }
+    .badge::before { font-size: 0.9em; }
+    .pass::before { content: "✓"; }
+    .unverified::before { content: "?"; }
+    .blocked::before { content: "×"; }
+
+    .callout {
+      margin: 1rem 0;
+      padding: 1rem 1.1rem;
+      border: 1px solid #9ac9c5;
+      border-left: 5px solid var(--accent);
+      border-radius: 10px;
+      background: var(--accent-soft);
+    }
+    .callout.warning {
+      border-color: #e0bd62;
+      border-left-color: #b97800;
+      background: #fff8e5;
+    }
+    .callout.danger {
+      border-color: #e0a8a8;
+      border-left-color: var(--blocked);
+      background: #fff0f0;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+      background: #fff;
+    }
+    th, td {
+      padding: 0.72rem 0.8rem;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+    tr:last-child td { border-bottom: 0; }
+    th { background: #edf4f4; color: #253c43; }
+    tbody tr:nth-child(even) { background: #fafcfc; }
+
+    .diagram {
+      margin: 1.2rem 0;
+      padding: 0.6rem;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: #fbfdfd;
+    }
+    .diagram svg {
+      display: block;
+      width: 100%;
+      min-width: 760px;
+      height: auto;
+    }
+    .svg-node { fill: #fff; stroke: #4d6b74; stroke-width: 1.5; }
+    .svg-source { fill: #e8f0fb; stroke: #1e5aa8; stroke-width: 1.5; }
+    .svg-safe { fill: #e2f3f1; stroke: #116466; stroke-width: 1.7; }
+    .svg-stop { fill: #fde2e2; stroke: #982b2b; stroke-width: 1.6; }
+    .svg-warn { fill: #fff1c9; stroke: #946400; stroke-width: 1.6; }
+    .svg-text { fill: #172126; font: 600 14px system-ui, sans-serif; }
+    .svg-small { fill: #415760; font: 12px system-ui, sans-serif; }
+    .svg-line { fill: none; stroke: #44636e; stroke-width: 2; }
+    .svg-dash { fill: none; stroke: #982b2b; stroke-width: 2; stroke-dasharray: 7 5; }
+
+    .flow-list {
+      margin: 1rem 0 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: flow;
+    }
+    .flow-list li {
+      position: relative;
+      margin: 0;
+      padding: 0.75rem 0 0.75rem 3rem;
+      border-left: 2px solid #9fb8be;
+    }
+    .flow-list li::before {
+      counter-increment: flow;
+      content: counter(flow);
+      position: absolute;
+      left: -1.05rem;
+      top: 0.7rem;
+      width: 2rem;
+      height: 2rem;
+      display: grid;
+      place-items: center;
+      color: #fff;
+      background: var(--accent);
+      border-radius: 50%;
+      font-weight: 800;
+    }
+    .flow-list li:last-child { border-left-color: transparent; }
+
+    .kpi {
+      font-size: clamp(1.45rem, 4vw, 2.3rem);
+      font-weight: 850;
+      line-height: 1.15;
+      color: var(--accent);
+    }
+    .kpi-label { color: var(--muted); font-size: 0.88rem; }
+    .nowrap { white-space: nowrap; }
+    .source-list li { overflow-wrap: anywhere; }
+
+    footer {
+      padding: 2rem 0 0.5rem;
+      color: var(--muted);
+      font-size: 0.88rem;
+      text-align: center;
+    }
+
+    @media (max-width: 820px) {
+      .status-row, .grid-2, .grid-3, .package-grid, .repo-grid {
+        grid-template-columns: 1fr;
+      }
+      nav { position: static; }
+      .page { width: min(100% - 20px, 1180px); padding-top: 10px; }
+      main > section { padding: 20px 16px; }
+      .hero { border-radius: 14px; }
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0e1619;
+        --panel: #152125;
+        --ink: #edf5f4;
+        --muted: #aabdc2;
+        --line: #395057;
+        --accent-soft: #173b3a;
+        --blue-soft: #172e4b;
+        --pass-bg: #183a27;
+        --unverified-bg: #493813;
+        --blocked-bg: #492020;
+        --code: #203036;
+        --shadow: none;
+      }
+      body { background: var(--bg); }
+      nav { background: rgba(21,33,37,0.96); }
+      .card, .diagram, table { background: #172429; }
+      th { background: #22353b; color: var(--ink); }
+      tbody tr:nth-child(even) { background: #19282d; }
+      .lead { color: #cedcde; }
+      .callout.warning { background: #3d3216; }
+      .callout.danger { background: #3c1d1d; }
+      .svg-text { fill: #172126; }
+      .svg-small { fill: #415760; }
+    }
+
+    @media print {
+      :root {
+        --bg: #fff;
+        --panel: #fff;
+        --ink: #000;
+        --muted: #333;
+        --line: #aaa;
+        --shadow: none;
+      }
+      @page { size: A4; margin: 12mm; }
+      body { font-size: 10pt; background: #fff; }
+      .page { width: 100%; padding: 0; }
+      .hero { padding: 18pt; color: #000; background: #e8f3f2; box-shadow: none; }
+      .hero p, .hero-meta, .eyebrow { color: #222; }
+      h1 { font-size: 26pt; }
+      nav { display: none; }
+      main > section { margin: 9pt 0; padding: 14pt; box-shadow: none; break-inside: auto; }
+      h2, h3, h4 { break-after: avoid; }
+      .card, .callout, .table-wrap, tr, .diagram { break-inside: avoid; }
+      .status-row, .grid-2, .grid-3, .package-grid, .repo-grid { gap: 8pt; }
+      .diagram svg { min-width: 0; }
+      a { color: #000; text-decoration: none; }
+      a[href^="http"]::after { content: " <" attr(href) ">"; font-size: 8pt; overflow-wrap: anywhere; }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="hero">
+      <p class="eyebrow">AUTO_ROVER · Ubuntu 20.04 · ROS 1 Noetic · Phase-1</p>
+      <h1>NUC Ackermann 软件架构与任务闭环</h1>
+      <p>这份单文件文档说明当前代码已经实现什么、十个功能包怎样协作、数据如何从已知航点流到底盘边界，以及为什么真实物理执行仍被编译门可靠封锁。它是软件实现说明，不是实车放行证书。</p>
+      <div class="hero-meta">
+        <span>文档日期：2026-08-12</span>
+        <span>实现与公开导出基线：<code>9e45299872be3e6e1f68107bf35713d87c87196c</code></span>
+        <span>许可：Apache-2.0（仅项目原创内容）</span>
+      </div>
+    </header>
+
+    <nav aria-label="本文目录">
+      <ul>
+        <li><a href="#status">当前阶段</a></li>
+        <li><a href="#scope">任务边界</a></li>
+        <li><a href="#architecture">总体数据流</a></li>
+        <li><a href="#packages">十个功能包</a></li>
+        <li><a href="#ros-graph">ROS 图</a></li>
+        <li><a href="#algorithms">规划与控制</a></li>
+        <li><a href="#safety">安全闭环</a></li>
+        <li><a href="#wheeltec">Wheeltec 九层与帧</a></li>
+        <li><a href="#verification">验证矩阵</a></li>
+        <li><a href="#physical">物理阶段</a></li>
+        <li><a href="#repos">公共孵化仓</a></li>
+        <li><a href="#mission">任务如何完成</a></li>
+      </ul>
+    </nav>
+
+    <main>
+      <section id="status">
+        <h2>1. 当前整体阶段</h2>
+        <p class="lead">软件侧的 Phase-1 已知地图闭环和正式的进程内 Wheeltec 后端候选已经实现并通过完整测试；当前车辆牵引电源、激光雷达均关闭，VCU 仅由 NUC USB 供电。现阶段能安全完成的软件、静态审计和只读观测已经完成，真实写串口与车轮执行仍被刻意阻止。</p>
+
+        <div class="status-row" aria-label="三类状态总览">
+          <article class="card card-accent">
+            <span class="badge pass">PASS</span>
+            <h3>软件闭环</h3>
+            <p>十个 Noetic 包可编译安装，fake 闭环、核心集成、正式 Wheeltec 进程内路径、PTY/注入传输和仓库规则均通过。</p>
+          </article>
+          <article class="card card-warning">
+            <span class="badge unverified">UNVERIFIED</span>
+            <h3>实机事实</h3>
+            <p>installed firmware 身份、控制器 watchdog、制动/保持、物理 E-stop、负载下符号与转向语义，以及 FAST-LIVO2 实机外参/频率/延迟尚未验收。</p>
+          </article>
+          <article class="card card-danger">
+            <span class="badge blocked">BLOCKED</span>
+            <h3>物理执行</h3>
+            <p><code>kPhysicalActuationReleaseEnabled = false</code>。任何 YAML、launch 参数或调用方 opt-in 都不能越过这个编译期门，当前不会打开真实执行串口。</p>
+          </article>
+        </div>
+
+        <div class="callout danger">
+          <strong>最重要的结论：</strong>“程序已经写完并通过软件测试”不等于“车辆已获准运动”。当前最短路径是先闭合 installed firmware、断路器打开时的 parser resync/非正常重启、串口 ownership/watchdog/外部断电与地面制动证据；之后用户再给车辆和激光雷达上电，完成 FAST-LIVO2 与 known-map 实机验收。
+        </div>
+
+        <h3>当前只读 VCU 观察</h3>
+        <div class="grid-3">
+          <div class="card"><div class="kpi">612 / 612</div><div class="kpi-label">30 秒内有效反馈帧均为 <code>FlagStop=1</code></div></div>
+          <div class="card"><div class="kpi">≈ 20 Hz</div><div class="kpi-label">599 个稳定间隔均值 49.998498 ms</div></div>
+          <div class="card"><div class="kpi">0 bytes TX</div><div class="kpi-label"><code>O_RDONLY</code> 捕获；主机未发送任何字节</div></div>
+        </div>
+        <p class="small muted">捕获还观察到候选电压 4.455–4.456 V、前向反馈 −0.001～+0.001 m/s、横向 0、yaw −0.011～+0.011 rad/s。它只支持“USB 供电、牵引电源据报关闭时的被动状态”判断，不证明电机母线隔离，也不识别 STM32 固件。</p>
+      </section>
+
+      <section id="scope">
+        <h2>2. Phase-1 任务边界与不变量</h2>
+        <div class="grid-2">
+          <div>
+            <h3>本阶段要做</h3>
+            <ul>
+              <li>Ubuntu 20.04、ROS 1 Noetic 上的已知航点导航。</li>
+              <li>把外部定位转换为后轴中心 <code>EgoState</code>。</li>
+              <li>把版本化 <code>RoutePlan</code> 生成可执行 <code>Trajectory</code>。</li>
+              <li>Pure Pursuit 产生期望 <code>MotionReference</code>。</li>
+              <li>由安全监督、命令 guard、运动管理器和选定 VCU 后端共同决定是否执行。</li>
+              <li>终点受控减速、确认静止并 <code>STOP_AND_HOLD</code>。</li>
+            </ul>
+          </div>
+          <div>
+            <h3>明确不做</h3>
+            <ul>
+              <li>无 Phase-1 world model、在线障碍检测、局部避障或在线重规划。</li>
+              <li>无自动探索、覆盖规划或运行时任务管理器。</li>
+              <li>不在本阶段维护 ROS 2 空壳；未来是原生移植。</li>
+              <li>不把厂家 VCU 协议泄漏进 planning/control。</li>
+              <li>不把软件急停冒充物理独立急停链。</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>车辆运行不变量</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>约束</th><th>Phase-1 值</th><th>实现含义</th></tr></thead>
+            <tbody>
+              <tr><td>参考点</td><td><code>rear_axle_center</code></td><td>定位外参、轨迹、曲率和控制都以车辆后轴中心为控制参考点。</td></tr>
+              <tr><td>坐标符号</td><td>+x 前、+y 左、+z 上</td><td>正速度向前，正曲率左转；角度 rad、距离 m、速度 m/s。</td></tr>
+              <tr><td>速度</td><td>默认/上限 0.50 m/s</td><td>这是 commissioning 目标和初始上限，不是死区测量，也不是第一个非零离散命令。</td></tr>
+              <tr><td>加速度</td><td>≤ 0.20 m/s²</td><td>控制器和适配边界都保留斜坡；不能为越过死区而跳变。</td></tr>
+              <tr><td>转弯半径</td><td>R ≥ 0.95 m</td><td><code>|curvature| ≤ 1/0.95 m⁻¹</code>；0.80 m 商品值定义未知，不可用。</td></tr>
+              <tr><td>方向</td><td>禁止倒车</td><td>规划、控制、guard、vehicle manager 与 codec 均失效关闭。</td></tr>
+              <tr><td>通用 codec 参数</td><td>严格 <code>0 &lt; v &lt; 6.0 m/s</code></td><td>仅是可配置参数合法域；不授予任何车辆速度能力，Phase-1 仍固定 0.50 m/s。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="architecture">
+        <h2>3. 总体架构与闭环数据流</h2>
+        <p class="lead">ROS 只存在于图的边缘。领域类型、几何、规划、跟踪、安全和车辆状态机是普通 C++ 核心；ROS wrapper 只做参数、消息、服务、时间接收和显式转换。</p>
+
+        <div class="diagram">
+          <svg viewBox="0 0 1120 620" role="img" aria-labelledby="flow-title flow-desc">
+            <title id="flow-title">AUTO_ROVER Phase-1 主数据流</title>
+            <desc id="flow-desc">YAML 航点进入规划核心形成 RoutePlan 与 Trajectory，FAST-LIVO2 经定位适配形成 EgoState，Pure Pursuit 同时接收 ChassisState 和 SafetyState 后输出 MotionReference。车辆执行进程内部生成 VehicleExecutionCommand 并传给 Fake 或 Wheeltec 后端。全图不使用 cmd_vel。</desc>
+            <defs>
+              <marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#44636e"/></marker>
+              <marker id="arrow-red" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#982b2b"/></marker>
+            </defs>
+
+            <rect class="svg-source" x="25" y="40" width="180" height="72" rx="10"/>
+            <text class="svg-text" x="115" y="68" text-anchor="middle">waypoints.yaml</text>
+            <text class="svg-small" x="115" y="91" text-anchor="middle">当前 RoutePlan 入口</text>
+
+            <rect class="svg-node" x="265" y="35" width="205" height="82" rx="10"/>
+            <text class="svg-text" x="367" y="65" text-anchor="middle">RoutePlanner</text>
+            <text class="svg-small" x="367" y="88" text-anchor="middle">YAML → core RoutePlan</text>
+            <text class="svg-small" x="367" y="105" text-anchor="middle">→ Hermite Trajectory</text>
+
+            <rect class="svg-source" x="25" y="175" width="180" height="82" rx="10"/>
+            <text class="svg-text" x="115" y="204" text-anchor="middle">FAST-LIVO2</text>
+            <text class="svg-small" x="115" y="226" text-anchor="middle">/aft_mapped_to_init</text>
+            <text class="svg-small" x="115" y="244" text-anchor="middle">nav_msgs/Odometry</text>
+
+            <rect class="svg-node" x="265" y="175" width="205" height="82" rx="10"/>
+            <text class="svg-text" x="367" y="204" text-anchor="middle">Localization adapter</text>
+            <text class="svg-small" x="367" y="226" text-anchor="middle">world_T_source × source_T_rear</text>
+            <text class="svg-small" x="367" y="244" text-anchor="middle">→ /ego_state</text>
+
+            <rect class="svg-safe" x="535" y="100" width="205" height="102" rx="10"/>
+            <text class="svg-text" x="637" y="130" text-anchor="middle">Pure Pursuit</text>
+            <text class="svg-small" x="637" y="153" text-anchor="middle">Trajectory + EgoState</text>
+            <text class="svg-small" x="637" y="171" text-anchor="middle">+ ChassisState + SafetyState</text>
+            <text class="svg-small" x="637" y="189" text-anchor="middle">→ /motion_reference</text>
+
+            <rect class="svg-safe" x="805" y="85" width="270" height="135" rx="10"/>
+            <text class="svg-text" x="940" y="115" text-anchor="middle">Vehicle execution process</text>
+            <text class="svg-small" x="940" y="139" text-anchor="middle">SafetySupervisor → CommandGuard</text>
+            <text class="svg-small" x="940" y="158" text-anchor="middle">→ VehicleMotionManager</text>
+            <text class="svg-small" x="940" y="182" text-anchor="middle">VehicleExecutionCommand</text>
+            <text class="svg-small" x="940" y="201" text-anchor="middle">仅进程内 C++ 值，不是 ROS topic</text>
+
+            <rect class="svg-node" x="805" y="310" width="125" height="78" rx="10"/>
+            <text class="svg-text" x="867" y="339" text-anchor="middle">FakeVcu</text>
+            <text class="svg-small" x="867" y="361" text-anchor="middle">软件验证</text>
+            <text class="svg-small" x="867" y="378" text-anchor="middle">可闭环</text>
+
+            <rect class="svg-warn" x="950" y="290" width="125" height="118" rx="10"/>
+            <text class="svg-text" x="1012" y="318" text-anchor="middle">Wheeltec</text>
+            <text class="svg-small" x="1012" y="340" text-anchor="middle">正式进程内后端</text>
+            <text class="svg-small" x="1012" y="359" text-anchor="middle">默认禁用</text>
+            <text class="svg-small" x="1012" y="378" text-anchor="middle">compile gate=false</text>
+            <text class="svg-small" x="1012" y="396" text-anchor="middle">UNVERIFIED</text>
+
+            <rect class="svg-node" x="535" y="320" width="205" height="84" rx="10"/>
+            <text class="svg-text" x="637" y="349" text-anchor="middle">/chassis_state</text>
+            <text class="svg-small" x="637" y="372" text-anchor="middle">归一化底盘反馈</text>
+            <text class="svg-small" x="637" y="391" text-anchor="middle">receipt freshness</text>
+
+            <rect class="svg-safe" x="535" y="485" width="205" height="82" rx="10"/>
+            <text class="svg-text" x="637" y="514" text-anchor="middle">/safety_state</text>
+            <text class="svg-small" x="637" y="536" text-anchor="middle">软件授权反馈</text>
+            <text class="svg-small" x="637" y="554" text-anchor="middle">不伪造 VCU enable / ACK</text>
+
+            <path class="svg-line" d="M205 76 H265" marker-end="url(#arrow)"/>
+            <text class="svg-small" x="235" y="67" text-anchor="middle">load</text>
+            <path class="svg-line" d="M470 76 H535 V120" marker-end="url(#arrow)"/>
+            <text class="svg-small" x="504" y="66">/trajectory</text>
+            <path class="svg-line" d="M205 216 H265" marker-end="url(#arrow)"/>
+            <path class="svg-line" d="M470 216 H505 V173 H535" marker-end="url(#arrow)"/>
+            <text class="svg-small" x="481" y="208">/ego_state</text>
+            <path class="svg-line" d="M740 151 H805" marker-end="url(#arrow)"/>
+            <text class="svg-small" x="772" y="141" text-anchor="middle">/motion_reference</text>
+            <path class="svg-line" d="M940 220 V270 H867 V310" marker-end="url(#arrow)"/>
+            <path class="svg-dash" d="M940 220 V255 H1012 V290" marker-end="url(#arrow-red)"/>
+            <text class="svg-small" x="917" y="248" text-anchor="middle">backend 选择</text>
+            <path class="svg-line" d="M867 388 V442 H740 V362" marker-end="url(#arrow)"/>
+            <path class="svg-line" d="M1012 408 V442 H740 V380" marker-end="url(#arrow)"/>
+            <path class="svg-line" d="M535 362 H505 V202 H535" marker-end="url(#arrow)"/>
+            <path class="svg-line" d="M740 350 H780 V195 H805" marker-end="url(#arrow)"/>
+            <path class="svg-line" d="M940 220 V526 H740" marker-end="url(#arrow)"/>
+            <path class="svg-line" d="M535 526 H495 V186 H535" marker-end="url(#arrow)"/>
+
+            <rect class="svg-stop" x="25" y="480" width="370" height="88" rx="10"/>
+            <text class="svg-text" x="210" y="509" text-anchor="middle">明确不存在：/cmd_vel 内部通道</text>
+            <text class="svg-small" x="210" y="532" text-anchor="middle">tracker 不输出 Twist；adapter 不接收未检查的 tracker 命令</text>
+            <text class="svg-small" x="210" y="551" text-anchor="middle">最终执行命令只在 vehicle execution 进程内部流动</text>
+          </svg>
+        </div>
+
+        <ol class="flow-list">
+          <li><strong>路线入口：</strong>当前没有一个“off-board RoutePlan ROS 发布节点”。<code>waypoints.yaml</code> 被 <code>route_planner_node</code> 严格解析成核心域 <code>RoutePlan</code>，再生成并周期发布 <code>/trajectory</code>。</li>
+          <li><strong>定位入口：</strong>FAST-LIVO2 的 <code>/aft_mapped_to_init</code>（<code>nav_msgs/Odometry</code>）经过固定外参数值合成，输出后轴中心 <code>/ego_state</code>；不查询或广播 TF。</li>
+          <li><strong>跟踪：</strong>Pure Pursuit 同时要求新鲜、有效、有序的 <code>Trajectory</code>、<code>EgoState</code>、<code>ChassisState</code> 和 <code>SafetyState</code>，然后输出 <code>/motion_reference</code>。</li>
+          <li><strong>执行决策：</strong>车辆执行核心再次验证全套输入，SafetySupervisor 给出模式，CommandGuard 给出受控参考，VehicleMotionManager 生成带序号与单调时钟 deadline 的 <code>VehicleExecutionCommand</code>。</li>
+          <li><strong>后端：</strong><code>VehicleExecutionCommand</code> 通过进程内 C++ <code>VehicleBackend</code> 接口送到 FakeVcu 或 Wheeltec 后端；它没有对应 ROS 消息，不暴露公共 bypass topic。</li>
+          <li><strong>反馈闭环：</strong>后端归一化反馈为 <code>/chassis_state</code>；车辆执行发布 <code>/safety_state</code>。两者同时返回 tracker，防止“控制器不知道软件是否已授权”的死锁或越权。</li>
+        </ol>
+      </section>
+
+      <section id="packages">
+        <h2>4. 十个功能包与依赖职责</h2>
+        <p>依赖方向始终从应用边缘流向可复用核心：planning 不依赖定位实现或 VCU；control 不依赖 VCU；adapter 不含轨迹跟踪；底层包不依赖 bringup。</p>
+
+        <div class="package-grid">
+          <article class="card card-accent">
+            <h3>1 · auto_rover_core</h3>
+            <p><strong>角色：</strong>ROS 无关的领域类型、几何、角度/位姿运算和合同校验。</p>
+            <p><strong>关键值：</strong><code>EgoState</code>、<code>RoutePlan</code>、<code>Trajectory</code>、<code>MotionReference</code>、<code>ChassisState</code>、<code>SafetyState</code>、<code>VehicleProfile</code>、进程内 <code>VehicleExecutionCommand</code>。</p>
+            <p><strong>节点：</strong>无。它是其余算法包的最底层。</p>
+          </article>
+
+          <article class="card card-blue">
+            <h3>2 · auto_rover_interfaces</h3>
+            <p><strong>角色：</strong>ROS 1 Noetic 公共合同源码，只含消息和服务定义。</p>
+            <p><strong>9 个消息：</strong>ChassisState、EgoState、EmergencyStop、MotionReference、RoutePlan、RouteWaypoint、SafetyState、Trajectory、TrajectoryPoint。</p>
+            <p><strong>4 个服务：</strong>ArmVehicle、AssertEmergencyStop、ReloadRoute、ResetEmergencyStop。</p>
+          </article>
+
+          <article class="card card-blue">
+            <h3>3 · auto_rover_ros1_conversions</h3>
+            <p><strong>角色：</strong>ROS 消息与核心域类型的一一显式转换，处理枚举、时间、姿态、valid mask 与不可用字段。</p>
+            <p><strong>边界：</strong>转换本身不证明 freshness；订阅 wrapper 另外记录本机单调 receipt time。</p>
+            <p><strong>节点：</strong>无。</p>
+          </article>
+
+          <article class="card card-warning">
+            <h3>4 · auto_rover_localization</h3>
+            <p><strong>角色：</strong>FAST-LIVO2 <code>nav_msgs/Odometry</code> 到后轴中心 <code>EgoState</code> 的薄适配。</p>
+            <p><strong>节点：</strong><code>fast_livo_odometry_node</code> / <code>fast_livo_odometry_adapter</code>。</p>
+            <p><strong>严格项：</strong>审计过的 source revision、<code>camera_init</code>/<code>aft_mapped</code>、递增 stamp、receipt freshness、已知归一化外参。真实配置的外参和 freshness 仍故意无效，所以当前实机启动会 fail closed。</p>
+          </article>
+
+          <article class="card card-accent">
+            <h3>5 · auto_rover_planning</h3>
+            <p><strong>角色：</strong>严格且有编译期资源上限的 YAML 航点加载、路线版本仓库、Hermite 轨迹生成与曲率可行性验证。</p>
+            <p><strong>节点：</strong><code>route_planner_node</code> / <code>route_planner</code>。</p>
+            <p><strong>输出：</strong>确定性 trajectory identity、弧长、yaw、曲率、速度与 <code>STOP_AND_HOLD</code> 完成语义；输入和输出资源边界与车辆执行端对齐。</p>
+          </article>
+
+          <article class="card card-accent">
+            <h3>6 · auto_rover_control</h3>
+            <p><strong>角色：</strong>ROS 无关 Pure Pursuit 跟踪器与薄 wrapper。</p>
+            <p><strong>节点：</strong><code>pure_pursuit_node</code> / <code>pure_pursuit</code>。</p>
+            <p><strong>输出：</strong>只产生期望 <code>MotionReference</code>；它不是执行授权，更不了解串口、Wheeltec 或 <code>/cmd_vel</code>。</p>
+          </article>
+
+          <article class="card card-accent">
+            <h3>7 · auto_rover_safety</h3>
+            <p><strong>角色：</strong>SafetySupervisor 与 CommandGuard 两个 ROS 无关核心。</p>
+            <p><strong>能力：</strong>启动 inhibit、连续新鲜恢复、显式 arm、故障撤权、锁存软件 E-stop、授权且 generation 匹配的 reset，以及输入 freshness/validity/限值/方向检查。</p>
+            <p><strong>节点：</strong>无；被车辆执行进程组合。</p>
+          </article>
+
+          <article class="card card-accent">
+            <h3>8 · auto_rover_vehicle</h3>
+            <p><strong>角色：</strong>VehicleExecutionCore、VehicleMotionManager、通用 VehicleBackend 接口与确定性 FakeVcu。</p>
+            <p><strong>节点：</strong><code>vehicle_execution_node</code> / <code>vehicle_execution</code>（fake 后端组合）。</p>
+            <p><strong>关键边界：</strong>唯一生成 <code>VehicleExecutionCommand</code> 的地方；启动、故障、重连、E-stop、异常和退出都会撤销授权并尝试显式零命令。</p>
+          </article>
+
+          <article class="card card-warning">
+            <h3>9 · auto_rover_vcu_wheeltec_serial</h3>
+            <p><span class="badge unverified">UNVERIFIED</span></p>
+            <p><strong>角色：</strong>原创的候选 codec、流 parser、物理 transport、activation、adapter watchdog、runtime、VehicleBackend 和正式 ROS wrapper。</p>
+            <p><strong>节点：</strong><code>wheeltec_vehicle_execution_node</code> / <code>wheeltec_vehicle_execution</code>。另有 receive-only 与实验台架工具，但它们不接入导航图。</p>
+            <p><strong>状态：</strong>注入/PTY 路径通过；真实 actuation 编译门为 false。</p>
+          </article>
+
+          <article class="card card-blue">
+            <h3>10 · auto_rover_known_map_bringup</h3>
+            <p><strong>角色：</strong>NUC Ackermann 已知地图应用组合，拥有车辆 profile、路线、控制、定位和安全配置，以及最小 launch。</p>
+            <p><strong>测试夹具：</strong><code>fake_fast_livo_source.py</code> 根据 fake chassis feedback 积分位姿，形成确定性软件闭环。</p>
+            <p><strong>边界：</strong>它不是可复用算法包，不提供探索/覆盖模式切换。</p>
+          </article>
+        </div>
+
+        <h3>依赖拓扑</h3>
+        <pre aria-label="功能包依赖拓扑">core ───────────────┬── planning ─────┐
+                     ├── control ──────┤
+interfaces ─┬─ conversions ────────────┤
+            │                          ├── known_map_bringup
+core ───────┴─ safety ── vehicle ─────┤
+interfaces + conversions ── vehicle ──┤
+vehicle + core + interfaces + conversions ── wheeltec adapter
+core + interfaces + conversions + nav_msgs ── localization</pre>
+      </section>
+
+      <section id="ros-graph">
+        <h2>5. ROS 节点、话题、服务与 launch</h2>
+        <h3>节点与公共图接口</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>节点</th><th>订阅</th><th>发布</th><th>服务/说明</th></tr></thead>
+            <tbody>
+              <tr>
+                <td><code>fast_livo_odometry_adapter</code></td>
+                <td>配置指定的 <code>/aft_mapped_to_init</code>，队列 1</td>
+                <td><code>/ego_state</code>，队列 1</td>
+                <td>固定外参数值合成；真实配置缺证据时拒绝启动。</td>
+              </tr>
+              <tr>
+                <td><code>route_planner</code></td>
+                <td>无 ROS 路线订阅；直接读取版本化 YAML</td>
+                <td><code>/trajectory</code>，队列 1，默认 10 Hz</td>
+                <td><code>/reload_route</code>；失败后发布 invalid trajectory，不继续悄用旧路线。</td>
+              </tr>
+              <tr>
+                <td><code>pure_pursuit</code></td>
+                <td><code>/ego_state</code>、<code>/trajectory</code>、<code>/chassis_state</code>、<code>/safety_state</code>，全部队列 1</td>
+                <td><code>/motion_reference</code>，队列 1，默认 20 Hz</td>
+                <td>每个 callback 记录 <code>ros::SteadyTime</code> receipt。</td>
+              </tr>
+              <tr>
+                <td><code>vehicle_execution</code></td>
+                <td><code>/ego_state</code>、<code>/trajectory</code>、<code>/motion_reference</code> 队列 1；<code>/emergency_stop</code> 事件队列 10</td>
+                <td><code>/chassis_state</code>、<code>/safety_state</code>，队列 1</td>
+                <td><code>/arm_vehicle</code>、<code>/assert_emergency_stop</code>、<code>/reset_emergency_stop</code>；私有 fake 故障注入服务仅用于测试。</td>
+              </tr>
+              <tr>
+                <td><code>wheeltec_vehicle_execution</code></td>
+                <td>与 fake vehicle execution 相同</td>
+                <td>与 fake vehicle execution 相同</td>
+                <td>替代 fake 节点而不是与其并行；worker 使用独立 steady-clock 线程，ROS 结果通过单槽非阻塞 mailbox 发布。</td>
+              </tr>
+              <tr>
+                <td><code>fake_fast_livo_source</code></td>
+                <td><code>/chassis_state</code>，队列 1</td>
+                <td><code>/aft_mapped_to_init</code>，队列 1，20 Hz</td>
+                <td>仅软件测试；使用显式 −0.20 m source-to-rear 外参，避免单位外参假通过。</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <strong>为何没有 <code>/cmd_vel</code>：</strong>内部通用合同是 <code>MotionReference</code>，最后经 guard 和 VehicleMotionManager 变成进程内 <code>VehicleExecutionCommand</code>。只有未来某个已选定且明确审计的 VCU adapter 才能在自身边界做 Twist 映射；当前 Wheeltec 路径直接编码候选串口帧。
+        </div>
+
+        <h3>服务语义</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>服务</th><th>用途</th><th>失效关闭规则</th></tr></thead>
+            <tbody>
+              <tr><td><code>/reload_route</code></td><td>重新读取 YAML 并替换路线版本</td><td>语法、schema、frame、版本、速度、曲率或资源限制失败时激活 invalid trajectory。</td></tr>
+              <tr><td><code>/arm_vehicle</code></td><td>显式 arm/disarm</td><td>要求 operator 非空、请求的 safety generation 精确匹配、actuation enabled 且连续健康恢复完成。</td></tr>
+              <tr><td><code>/assert_emergency_stop</code></td><td>带确认响应的软件 E-stop 事件入口</td><td>成功断言后 latch generation 增加并立即撤权；普通 arm 无法清除。</td></tr>
+              <tr><td><code>/reset_emergency_stop</code></td><td>授权复位锁存</td><td>reset 边界默认关闭；需授权 operator、精确 latch generation、条件清除确认和连续新鲜健康样本。</td></tr>
+              <tr><td><code>~fake_connected</code> / <code>~fake_faulted</code> / <code>~fake_drop_feedback</code></td><td>确定性注入断开、故障和反馈丢失</td><td>仅 fake 节点私有测试接口，不属于物理控制合同。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>launch 组合</h3>
+        <div class="grid-2">
+          <article class="card"><h4><code>known_map_fake.launch</code></h4><p>一键启动定位、规划/控制、fake vehicle execution 和 fake FAST-LIVO source。默认 <code>actuation_enabled=false</code>；测试会另外启动显式 enabled namespace。</p></article>
+          <article class="card"><h4><code>localization.launch</code></h4><p>真实 FAST-LIVO2 薄适配。默认配置 <code>extrinsic.known=false</code>、<code>freshness_limit_s=0</code>，所以没有实测值时不能误启动。</p></article>
+          <article class="card"><h4><code>planning_control.launch</code></h4><p>加载 waypoints、planning、control 与 vehicle runtime profile，启动 route planner 和 Pure Pursuit。</p></article>
+          <article class="card"><h4><code>vehicle_execution.launch</code></h4><p>只选择 FakeVcu，完全没有物理 transport 选择；适合软件闭环与 fault/E-stop/recovery 验证。</p></article>
+          <article class="card card-warning"><h4><code>vehicle_execution_wheeltec_unverified.launch</code></h4><p>独立的正式 Wheeltec 候选组合。七个运行门全部默认 false、device path 为空；即使全部参数被手工改真，编译门仍拒绝物理 actuation open。</p></article>
+        </div>
+      </section>
+
+      <section id="algorithms">
+        <h2>6. 路线、轨迹、定位与 Pure Pursuit</h2>
+
+        <h3>6.1 当前 RoutePlan 如何进入系统</h3>
+        <p>当前入口是应用包中的 <code>config/waypoints.yaml</code>，不是在线规划器和 ROS RoutePlan topic。严格 loader 只接受 schema v1 的完整键集：</p>
+        <pre>schema_version: 1
+frame_id: camera_init
+route_id: commissioning_route_01
+plan_version: 1
+loop: false
+waypoints:
+  - {x_m: 0.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}
+  - {x_m: 2.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}</pre>
+        <p>未知键、缺失键、重复键、非有限数、少于两个点、重复位置、错误 frame、非正版本、负速度、超限速度、reverse 或不合法路线都会拒绝。RouteRepository 还防止同一路线版本回退或同版本内容改变。</p>
+
+        <h3>6.2 Planning 资源边界（ADR 0006，Proposed）</h3>
+        <p><a href="../adr/0006-bounded-known-map-planning-resources.md">ADR 0006</a> 当前状态是 <strong>Proposed</strong>，不是 Accepted。它把操作员可编辑路线当作可能最终请求运动的车载输入，在调用 <code>yaml-cpp</code>、分配航点、做重复位置比较、哈希和 Hermite probe 之前先限制工作量。所有上限都是公共 ROS-free header 中的编译期安全合同，不能由 launch 或 YAML 放宽，也不会截断超限内容。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>资源</th><th>最大值</th><th>最早执行位置与意义</th></tr></thead>
+            <tbody>
+              <tr><td>完整 YAML 文档</td><td><code>1,048,576 bytes</code>（1 MiB）</td><td>string/file 两种入口都在解析前检查；文件入口采用有界二进制读取并只在成功读到 EOF 后解析，不调用 <code>YAML::LoadFile</code>。</td></tr>
+              <tr><td>YAML map key</td><td><code>64 bytes</code></td><td>在插入 key 或扩展诊断字符串前拒绝，避免任意长键造成额外工作。</td></tr>
+              <tr><td>numeric scalar</td><td><code>64 bytes</code></td><td>在正则和数值转换前拒绝；仍必须通过严格有限十进制语法。</td></tr>
+              <tr><td>boolean scalar</td><td><code>5 bytes</code></td><td>在比较 <code>true</code>/<code>false</code> 前检查。</td></tr>
+              <tr><td><code>route_id</code></td><td><code>210 UTF-8 bytes</code></td><td>generated trajectory ID 最坏还会增加 46 bytes：两个分隔符、20 位 uint64 plan version、<code>fnv1a64-</code> 和 16 位十六进制 fingerprint，最终恰好不超过 256 bytes。</td></tr>
+              <tr><td><code>frame_id</code></td><td><code>256 UTF-8 bytes</code></td><td>loader 与 generator 都检查，直接调用 generator 也不能绕过。</td></tr>
+              <tr><td>generator 使用的 <code>profile_id</code></td><td><code>256 UTF-8 bytes</code></td><td>轨迹生成前检查，与下游 identity envelope 一致。</td></tr>
+              <tr><td>generated <code>trajectory_id</code></td><td><code>256 bytes</code></td><td>身份构造完成后、采样前立即检查。</td></tr>
+              <tr><td>Route waypoints</td><td><code>2,048</code></td><td>在 reserve、O(n²) 重复位置检查、哈希或 Hermite 工作前拒绝。</td></tr>
+              <tr><td>Generated trajectory points</td><td><code>4,096</code></td><td>在分配和采样前累计；恰好 4096 可接受，第 4097 个必须失败且不留下可执行点。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="callout">
+          <strong>与执行边界对齐：</strong>VehicleExecutionCore 已独立限制最多 4,096 个轨迹点、每个语义 identity 最多 256 bytes。planner 现在不再生成“下游必拒绝”的百万点候选，也不会先消耗大量 CPU/内存再失败。2,048 个 waypoint 的 Hermite 段至少产生 4,095 个点，但更密采样或复杂几何仍可能超过 4,096，因此 waypoint 达标不承诺生成必成功。任何资源失败都返回 points 为空的 invalid trajectory；事务式 reload 不会继续保留旧的可执行路线。</div>
+
+        <h3>6.3 轨迹生成</h3>
+        <div class="grid-2">
+          <div class="card">
+            <h4>几何</h4>
+            <ul>
+              <li>相邻航点由二维 cubic Hermite 段连接。</li>
+              <li>先做密集 feasibility probe，再按 0.05 m 分辨率采样。</li>
+              <li>计算切向 yaw、解析曲率、累积弧长并拒绝零切线/重复采样。</li>
+              <li>曲率全程必须满足 <code>|κ| ≤ 1 / 0.95</code>。</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h4>语义与资源界限</h4>
+            <ul>
+              <li>速度在航点间插值，方向固定 FORWARD。</li>
+              <li>trajectory identity 由路线、profile 和配置的确定性 fingerprint 构成。</li>
+              <li>带 route_id、plan_version、valid_for、vehicle_profile_id。</li>
+              <li>完成语义固定为 <code>STOP_AND_HOLD</code>；执行边界最多接收 4096 点。</li>
+            </ul>
+          </div>
+        </div>
+
+        <h3>6.4 定位转换</h3>
+        <p>定位核心执行明确乘法顺序 <code>world_T_rear = world_T_source × source_T_rear</code>。它验证 <code>camera_init</code>、<code>aft_mapped</code>、审计过的 FAST-LIVO2 revision、递增 provider publish stamp、单调 receipt freshness、有限位姿和归一化外参四元数。FAST-LIVO2 stamp 目前被标注为 <strong>publish time</strong>，不是传感器 sample time；代码不会伪造 twist、covariance 或 sample timestamp。</p>
+
+        <h3>6.5 Pure Pursuit</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>步骤</th><th>当前实现</th><th>安全结果</th></tr></thead>
+            <tbody>
+              <tr><td>输入门</td><td>四个输入必须 valid、receiver-fresh、producer-valid、身份/时间有序；trajectory 与 profile 合同必须一致。</td><td>任一失败输出 invalid exact-zero，并清除斜坡授权。</td></tr>
+              <tr><td>软件授权</td><td>所有非 ARMED 的有效 SafetyState 输出 valid exact-zero；第一次 ARMED 更新也只建立零斜坡原点。</td><td>避免从未知旧速度直接起步；软件授权不伪造 VCU enable。</td></tr>
+              <tr><td>VCU enable 能力</td><td>若 chassis 从未提供 <code>CONTROL_ENABLED_VALID</code>，ARMED 可形成参考；若该 bit 存在但 false，则保持零；同一 source 一旦提供后又消失，fail closed。</td><td>兼容 Wheeltec “能力不可证实”，同时不把 FlagStop 当 enable。</td></tr>
+              <tr><td>进度</td><td>只从当前 progress index 向后搜索最近点，防止正常运行时回跳。</td><td>trajectory/source identity 回退或 retired generation replay 被拒绝。</td></tr>
+              <tr><td>动态前视</td><td><code>L = clamp(0.40 + 0.50·|v_measured|, 0.40, 0.80) m</code>。</td><td>目标点必须在车辆局部 +x 前方，否则失效关闭。</td></tr>
+              <tr><td>曲率</td><td><code>κ = 2·y_local / (Δx² + Δy²)</code>，正值左转。</td><td>非有限或超过 <code>1/0.95 m⁻¹</code> 立即拒绝。</td></tr>
+              <tr><td>减速</td><td><code>v_stop = sqrt(2·a_max·remaining_distance)</code>，与轨迹速度取最小，再做 0.20 m/s² 双向斜率限制。</td><td>到达 0.08 m 位置阈值后继续减到零，只有实测速度 ≤0.01 m/s 才报告 route complete。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="safety">
+        <h2>7. 安全状态机与双重 watchdog</h2>
+        <p class="lead">非零运动不是由一个布尔参数决定，而是由状态机、输入健康、明确 operator arm、命令 generation/deadline、后端连接与适配器本地授权共同满足。任一层失败都会撤权并进入显式零命令路径。</p>
+
+        <div class="diagram">
+          <svg viewBox="0 0 1060 470" role="img" aria-labelledby="safety-title safety-desc">
+            <title id="safety-title">SafetySupervisor 状态机</title>
+            <desc id="safety-desc">进程从 BOOT_INHIBITED 进入 RECOVERY_INHIBITED，连续健康样本后进入 DISARMED，明确 arm 后进入 ARMED。任何故障进入 FAULT_INHIBITED，恢复后只回 DISARMED。任意状态都可被紧急停止断言带入 ESTOP_LATCHED，只有授权且 generation 匹配的复位才能回 DISARMED。</desc>
+            <defs>
+              <marker id="safe-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#44636e"/></marker>
+              <marker id="safe-red" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#982b2b"/></marker>
+            </defs>
+            <rect class="svg-warn" x="30" y="70" width="180" height="74" rx="37"/>
+            <text class="svg-text" x="120" y="100" text-anchor="middle">BOOT_INHIBITED</text>
+            <text class="svg-small" x="120" y="123" text-anchor="middle">启动不允许运动</text>
+            <rect class="svg-warn" x="270" y="70" width="210" height="74" rx="37"/>
+            <text class="svg-text" x="375" y="100" text-anchor="middle">RECOVERY_INHIBITED</text>
+            <text class="svg-small" x="375" y="123" text-anchor="middle">连续新鲜样本计数</text>
+            <rect class="svg-node" x="545" y="70" width="170" height="74" rx="37"/>
+            <text class="svg-text" x="630" y="100" text-anchor="middle">DISARMED</text>
+            <text class="svg-small" x="630" y="123" text-anchor="middle">健康但未授权</text>
+            <rect class="svg-safe" x="810" y="70" width="170" height="74" rx="37"/>
+            <text class="svg-text" x="895" y="100" text-anchor="middle">ARMED</text>
+            <text class="svg-small" x="895" y="123" text-anchor="middle">仍需所有 guard</text>
+
+            <rect class="svg-stop" x="330" y="245" width="210" height="78" rx="39"/>
+            <text class="svg-text" x="435" y="276" text-anchor="middle">FAULT_INHIBITED</text>
+            <text class="svg-small" x="435" y="299" text-anchor="middle">故障/过期/断开撤权</text>
+            <rect class="svg-stop" x="700" y="345" width="230" height="82" rx="41"/>
+            <text class="svg-text" x="815" y="377" text-anchor="middle">ESTOP_LATCHED</text>
+            <text class="svg-small" x="815" y="401" text-anchor="middle">不自动恢复；generation 锁存</text>
+
+            <path class="svg-line" d="M210 107 H270" marker-end="url(#safe-arrow)"/>
+            <text class="svg-small" x="240" y="95" text-anchor="middle">boot complete</text>
+            <path class="svg-line" d="M480 107 H545" marker-end="url(#safe-arrow)"/>
+            <text class="svg-small" x="512" y="92" text-anchor="middle">N 个健康样本</text>
+            <path class="svg-line" d="M715 107 H810" marker-end="url(#safe-arrow)"/>
+            <text class="svg-small" x="762" y="92" text-anchor="middle">显式 arm + state_id</text>
+            <path class="svg-line" d="M810 134 C760 190, 690 190, 630 144" marker-end="url(#safe-arrow)"/>
+            <text class="svg-small" x="725" y="186" text-anchor="middle">disarm</text>
+
+            <path class="svg-dash" d="M895 144 C850 245, 650 270, 540 282" marker-end="url(#safe-red)"/>
+            <path class="svg-dash" d="M630 144 C610 220, 550 252, 540 270" marker-end="url(#safe-red)"/>
+            <text class="svg-small" x="655" y="237" text-anchor="middle">任一健康条件失败</text>
+            <path class="svg-line" d="M435 245 C455 190, 535 150, 590 144" marker-end="url(#safe-arrow)"/>
+            <text class="svg-small" x="495" y="194" text-anchor="middle">重新连续恢复，只回 DISARMED</text>
+
+            <path class="svg-dash" d="M120 144 C180 390, 530 397, 700 386" marker-end="url(#safe-red)"/>
+            <path class="svg-dash" d="M375 144 C400 355, 590 375, 700 382" marker-end="url(#safe-red)"/>
+            <path class="svg-dash" d="M630 144 C640 280, 720 330, 750 350" marker-end="url(#safe-red)"/>
+            <path class="svg-dash" d="M895 144 V345" marker-end="url(#safe-red)"/>
+            <text class="svg-small" x="930" y="252">E-stop assert</text>
+            <path class="svg-line" d="M815 345 C820 220, 735 165, 675 144" marker-end="url(#safe-arrow)"/>
+            <text class="svg-small" x="790" y="238" text-anchor="middle">授权 reset + generation 匹配 + 条件清除</text>
+          </svg>
+        </div>
+
+        <h3>安全职责分层</h3>
+        <div class="grid-3">
+          <article class="card"><h4>SafetySupervisor</h4><p>拥有 boot/recovery/disarmed/armed/fault/E-stop latch 模式；arm 必须携带当前 state generation。E-stop generation 单调增长，复位不直接进入运动。</p></article>
+          <article class="card"><h4>CommandGuard</h4><p>独立验证 Ego、Trajectory、MotionReference、ChassisState、SafetyState 的 receipt freshness、声明有效期、身份顺序、车辆 profile、方向和限值；恢复要求连续新命令。</p></article>
+          <article class="card"><h4>VehicleMotionManager</h4><p>把 guard 结果变成有 sequence、created monotonic time、absolute deadline、motion_enabled、hold 和 stop_reason 的执行命令；连接 generation 或授权变化会清除旧命令。</p></article>
+        </div>
+
+        <h3>双 watchdog 与失败语义</h3>
+        <ul>
+          <li><strong>上游 watchdog：</strong>CommandGuard 以本机单调 receipt time 检查各输入 age，同时检查 ROS/source stamp 声明的 <code>valid_for</code>。</li>
+          <li><strong>适配器 watchdog：</strong>VCU 后端独立检查 <code>VehicleExecutionCommand</code> age、deadline、sequence、连接 generation、本地授权时间与最大输出间隔；不依赖 ROS callback 是否继续运行。</li>
+          <li><strong>恢复：</strong>正常超时后不能用一帧“好消息”立即恢复；fake 配置和候选 Wheeltec 配置均要求连续新鲜命令/反馈。</li>
+          <li><strong>停止交付：</strong>链路可写时做有界零写；断开、部分写或超时会报告 <code>delivery_unconfirmed</code>，绝不把 OS write 当成 VCU ACK 或物理停车证明。</li>
+          <li><strong>独立硬件链：</strong>软件 E-stop 只是一条进程内锁存路径。物理急停、断电、制动/驻车仍须由车辆侧独立实现并验收。</li>
+        </ul>
+      </section>
+
+      <section id="wheeltec">
+        <h2>8. Wheeltec：从 ROS 到串口的九层责任与候选帧</h2>
+        <p class="lead">下面的“九层”是按当前实现责任从上到下展开的解释口径。每层只处理自己的问题，尤其不能把协议字段直接送进 tracker，也不能绕过共享车辆执行核心。</p>
+
+        <div class="diagram">
+          <svg viewBox="0 0 1100 610" role="img" aria-labelledby="nine-title nine-desc">
+            <title id="nine-title">Wheeltec 正式路径九层责任</title>
+            <desc id="nine-desc">从上到下依次是 ROS wrapper、VehicleExecutionCore、WheeltecVehicleBackend、WheeltecSerialRuntime、WheeltecSerialAdapter、codec、feedback stream parser、PreparedPhysicalActivation、PreparedPhysicalSerialOpen 和 PosixFdTransport 合并的物理传输层。物理层被 compile gate false 阻断。</desc>
+            <defs><marker id="nine-arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto" markerUnits="strokeWidth"><path d="M0,0 L0,6 L9,3 z" fill="#44636e"/></marker></defs>
+            <text class="svg-small" x="75" y="32">ROS / 应用边缘</text>
+            <text class="svg-small" x="885" y="32">职责与失效动作</text>
+
+            <g transform="translate(70 50)">
+              <rect class="svg-source" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">1 · wheeltec_vehicle_execution_node</text>
+              <text class="svg-small" x="675" y="29">队列1、服务、独立 worker、单槽 mailbox</text>
+            </g>
+            <g transform="translate(70 110)">
+              <rect class="svg-safe" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">2 · VehicleExecutionCore</text>
+              <text class="svg-small" x="675" y="29">SafetySupervisor + Guard + MotionManager</text>
+            </g>
+            <g transform="translate(70 170)">
+              <rect class="svg-node" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">3 · WheeltecVehicleBackend</text>
+              <text class="svg-small" x="675" y="29">通用 Backend API ↔ 厂商 runtime</text>
+            </g>
+            <g transform="translate(70 230)">
+              <rect class="svg-node" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">4 · WheeltecSerialRuntime</text>
+              <text class="svg-small" x="675" y="29">startup/drain/running/fault，RX freshness</text>
+            </g>
+            <g transform="translate(70 290)">
+              <rect class="svg-node" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">5 · WheeltecSerialAdapter</text>
+              <text class="svg-small" x="675" y="29">sequence/deadline/双授权/恢复计数/零重试</text>
+            </g>
+            <g transform="translate(70 350)">
+              <rect class="svg-node" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">6 · codec</text>
+              <text class="svg-small" x="675" y="29">执行值 ↔ 11B TX；24B 候选解码</text>
+            </g>
+            <g transform="translate(70 410)">
+              <rect class="svg-node" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">7 · FeedbackStreamParser</text>
+              <text class="svg-small" x="675" y="29">碎片/噪声重同步；坏帧不刷新 freshness</text>
+            </g>
+            <g transform="translate(70 470)">
+              <rect class="svg-warn" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">8 · PreparedPhysicalActivation</text>
+              <text class="svg-small" x="675" y="29">10×00 padding + exact-zero；部分写则整段重来</text>
+            </g>
+            <g transform="translate(70 530)">
+              <rect class="svg-stop" width="650" height="48" rx="9"/><text class="svg-text" x="20" y="30">9 · PreparedPhysicalSerialOpen + PosixFdTransport</text>
+              <text class="svg-small" x="675" y="20">路径/设备/USB/owner/排他/termios/deadline I/O</text>
+              <text class="svg-small" x="675" y="39">compile gate=false：真实 actuation open 在此拒绝</text>
+            </g>
+            <path class="svg-line" d="M395 98 V110 M395 158 V170 M395 218 V230 M395 278 V290 M395 338 V350 M395 398 V410 M395 458 V470 M395 518 V530" marker-end="url(#nine-arrow)"/>
+          </svg>
+        </div>
+
+        <h3>九层逐层说明</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>层</th><th>主要责任</th><th>失败时</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>ROS wrapper</td><td>订阅/服务/转换、输入资源上限；物理 worker 与 ROS callback 分离。</td><td>callback/backend 异常、deadline miss、mailbox contention 或超大输入触发 poison-aware stop 并终止节点。</td></tr>
+              <tr><td>2</td><td>VehicleExecutionCore</td><td>与 fake 完全共用的 SafetySupervisor、CommandGuard 和 MotionManager。</td><td>撤销 authorization epoch，生成/尝试零命令，不让 adapter 直接接 tracker。</td></tr>
+              <tr><td>3</td><td>VehicleBackend</td><td>把通用 health/poll/deliver/revoke/shutdown 语义映射到 Wheeltec runtime。</td><td>把后端断开/watchdog/未确认交付映射为通用 StopReason。</td></tr>
+              <tr><td>4</td><td>Runtime</td><td>startup zero、清 backlog、running、反馈 freshness、FlagStop 本地 inhibit、连接 generation。</td><td>断开为 terminal；普通撤权可在健康 session 内有界停机，但不会自动恢复旧授权。</td></tr>
+              <tr><td>5</td><td>Adapter</td><td>检查命令 sequence、created/deadline、age、codec limit、双授权、连接 generation；需要连续新鲜命令恢复。</td><td>清除缓存运动，进入有界 exact-zero episode；部分/失败写保持 delivery unconfirmed。</td></tr>
+              <tr><td>6</td><td>Codec</td><td>定宽整数、向零截断、前向/横向/yaw 映射、XOR、范围与曲率检查。</td><td>NaN/Inf、reverse、横向非零、零速非零 yaw、超速/超曲率/溢出均在 write 前拒绝。</td></tr>
+              <tr><td>7</td><td>Stream parser</td><td>在碎片和噪声流中寻找 24B header/tail/XOR/二值 FlagStop 合法候选。</td><td>丢一字节继续搜索；坏帧绝不刷新有效反馈 watchdog。</td></tr>
+              <tr><td>8</td><td>Physical activation</td><td>任何 write-enabled 调用者在首次读/普通命令前共同执行十个 <code>0x00</code> padding + exact-zero。</td><td>任何 partial/unknown prefix 都从完整 padding 重启；次数/deadline 有界，绝不尝试非零。</td></tr>
+              <tr><td>9</td><td>Physical open/transport</td><td>直接 <code>/dev</code> 路径、character TTY、major/minor/inode、owner/group/mode、USB VID/PID/serial、<code>flock</code>、<code>TIOCEXCL</code>、115200 8N1 readback 与 deadline I/O。</td><td>任一不匹配 fail closed；当前 actuation 模式更早被不可配置的编译门拒绝。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>候选 11 字节命令帧</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>字节</th><th>候选语义</th><th>编码规则</th></tr></thead>
+            <tbody>
+              <tr><td>0</td><td>header</td><td><code>0x7B</code></td></tr>
+              <tr><td>1–2</td><td>reserved</td><td>固定 <code>0x00 0x00</code></td></tr>
+              <tr><td>3–4</td><td>forward speed</td><td>有符号 int16，大端，<code>m/s × 1000</code>，向零截断</td></tr>
+              <tr><td>5–6</td><td>lateral speed</td><td>有符号 int16，大端；Ackermann Phase-1 必须为 0</td></tr>
+              <tr><td>7–8</td><td>yaw rate</td><td>有符号 int16，大端，<code>rad/s × 1000</code>；候选映射为 <code>speed × curvature</code></td></tr>
+              <tr><td>9</td><td>checksum</td><td>bytes 0…8 的 XOR</td></tr>
+              <tr><td>10</td><td>tail</td><td><code>0x7D</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>exact-zero 候选为 <code>7B 00 00 00 00 00 00 00 00 7B 7D</code>。但是，供应固件的 UART parser 使用跨 Linux close/reopen 保留的函数静态半帧计数，所以“主机写完一个完整 zero frame”并不证明 MCU 从帧边界开始解析。ADR 0003 的软件证明因此采用 <strong>10 个零 padding + exact-zero</strong>，覆盖 parser count 0…10；截至本文档时间，该序列仍未发送到真实 VCU。</p>
+
+        <h3>候选 24 字节反馈帧</h3>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>字节</th><th>候选语义</th><th>注意</th></tr></thead>
+            <tbody>
+              <tr><td>0</td><td>header <code>0x7B</code></td><td>parser 起点</td></tr>
+              <tr><td>1</td><td>二值 composite <code>FlagStop</code></td><td>0=本周期允许，1=本周期 inhibit，其他值整帧拒绝；不是 ACK、fault code 或 autonomous enable。</td></tr>
+              <tr><td>2–7</td><td>forward / lateral / yaw</td><td>三个有符号 int16，大端，除以 1000。</td></tr>
+              <tr><td>8–13</td><td>三轴 acceleration</td><td>三个有符号 int16，除以 1671.84。</td></tr>
+              <tr><td>14–19</td><td>三轴 gyro</td><td>三个有符号 int16，乘以 0.00026644。</td></tr>
+              <tr><td>20–21</td><td>supply voltage</td><td>无符号值除以 1000。</td></tr>
+              <tr><td>22</td><td>checksum</td><td>bytes 0…21 的 XOR。</td></tr>
+              <tr><td>23</td><td>tail <code>0x7D</code></td><td>候选结束。</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warning">
+          <strong>反馈缺失的事实：</strong>帧中没有已观察到的 VCU source timestamp、sequence、command echo、controller ACK、可归一化的 control-enabled 或具体 fault provenance。wrapper 只能标注本机 receipt time；完整 OS 写入只能证明字节到达主机传输边界。
+        </div>
+      </section>
+
+      <section id="verification">
+        <h2>9. 软件验证矩阵</h2>
+        <p class="lead">最近一次稳定工作树完整 gate 使用 <code>tools/ci/run_noetic_phase1_checks.sh</code>，未访问真实设备。结果覆盖仓库策略、Noetic 生成/安装、核心算法、ROS wrapper、fake 闭环、正式 Wheeltec 图和注入/PTY 边界。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Gate</th><th>结果</th><th>主要覆盖</th></tr></thead>
+            <tbody>
+              <tr><td>Repository policy tests</td><td><span class="badge pass">70 / 70</span></td><td>依赖方向、合同、launch 默认安全、物理 caller 枚举、许可/治理与仓库约束。</td></tr>
+              <tr><td>ROS interface contract files</td><td><span class="badge pass">4 / 4</span></td><td>9 消息、4 服务、schema 与 MD5 兼容边界。</td></tr>
+              <tr><td>ROS wrapper contracts</td><td><span class="badge pass">15 / 15</span></td><td>定位/规划/控制 wrapper，包含新增 safety_state 第四订阅、队列 1 与本机 steady receipt。</td></tr>
+              <tr><td>Fake localization scenarios</td><td><span class="badge pass">3 / 3</span></td><td>非单位外参、反馈驱动位置积分和 freshness。</td></tr>
+              <tr><td>ASan + UBSan integrations</td><td><span class="badge pass">2 / 2</span></td><td>纯核心完整闭环，以及 PurePursuit→VehicleExecutionCore→正式 Wheeltec backend 图回归。</td></tr>
+              <tr><td>Wheeltec sanitizer/injected/PTY harness</td><td><span class="badge pass">7 / 7</span></td><td>codec、parser、transport、activation、runtime、capture、bench/raw profile、SafetyState 发布交错、短写/断开/deadline。</td></tr>
+              <tr><td>Noetic isolated build/install</td><td><span class="badge pass">10 / 10 packages</span></td><td>Ubuntu 20.04/ROS 1 Noetic、GCC 9.4、C++14、固定依赖环境。</td></tr>
+              <tr><td>Planning focused tests</td><td><span class="badge pass">11 / 11</span></td><td>1 MiB 文档、64B key/numeric、5B bool、210B route、256B identity、2,048 waypoints、4,096/4,097 output，以及 string/file/direct-caller 边界。</td></tr>
+              <tr><td>catkin-managed tests</td><td><span class="badge pass">36 tests</span></td><td>最新全量结果：0 errors、0 failures、0 skipped。</td></tr>
+              <tr><td>Raw package CTest</td><td><span class="badge pass">20 / 20</span></td><td>control 2、core 1、bringup 1、localization 1、planning 1、conversions 1、safety 1、Wheeltec 9、vehicle 3。</td></tr>
+              <tr><td>ROS fake closed loop</td><td><span class="badge pass">RESULT: SUCCESS</span></td><td>默认 disable、显式 fake arm、首个非零小于 0.50、0.20 m/s² 斜坡、fault stop/re-arm、E-stop latch/reset reject。</td></tr>
+              <tr><td>Repository validator / compileall / diff check</td><td><span class="badge pass">PASS</span></td><td>静态仓库校验、Python 语法和补丁空白。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>关键安全回归</h3>
+        <ul>
+          <li>NaN/Inf、未知 schema/enum、错误 valid mask、reverse/gear、曲率和速度边界。</li>
+          <li>Ego/Chassis/Safety/Motion 的 receipt 回退、state/command generation 回退、semantic replay 和 retired identity 重放。</li>
+          <li>trajectory 内容与 plan_version 身份一致性、tracker 重启从 command_id=1 的新 generation 恢复。</li>
+          <li>启动 exact-zero、backlog 隔离、五个多 receipt 的 FlagStop 恢复、连接 generation 变化、部分写 poisoning、write completion deadline。</li>
+          <li>parser retained count 0…10 的零 padding 重同步穷举，以及 partial/unknown 写后必须从完整 padding 重启。</li>
+          <li>正式 Wheeltec wrapper 的确定性交错：即使 publication timer 已取出旧 ARMED cycle，更新的 E-stop/arm/disarm/reset reservation 也会在统一发布锁内使旧 SafetyState 二次 claim 失败，禁止状态回退。</li>
+          <li>物理 transport 在 open 前/fd/open 后 inode/major/minor/owner/group/mode 变化时拒绝；PTY race 后 fd 正确关闭且不残留 <code>TIOCEXCL</code>。</li>
+          <li>Planning 在解析/分配/采样前执行 1 MiB、64/5/210/256-byte、2,048-waypoint 与 4,096-point 编译期资源门；执行端仍独立检查 4,096 trajectory points、256-byte identifier 和 1024 retired identities。</li>
+          <li>4,096 点转换/校验/复制样本最大 0.354 ms，但这只是有界工作量样本，不是物理 worst-case 认证。</li>
+        </ul>
+
+        <div class="callout">
+          52 组架空轮 raw-profile 数据也已采集：12 组直线 0.5–6.0 m/s，以及 40 组 R=2.0/0.95 m 左右外轮速度级（到 5.0 m/s）；共 93,599 个反馈帧、parser 汇总错误为零。它们是协议/机理观察，不是 ground acceptance，也没有 VCU ACK 或 source-timed latency。
+        </div>
+      </section>
+
+      <section id="physical">
+        <h2>10. 物理未闭合项与下一阶段最短路径</h2>
+        <p>当前“车辆和 LiDAR 断电、VCU USB 供电”的条件下，能做的只读捕获、主机枚举、代码闭环、parser 软件证明和 transport race 测试已经完成。下列事实必须逐项留证，不能用参数修改替代。</p>
+
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>优先级</th><th>验收项</th><th>当前状态</th><th>闭合证据</th></tr></thead>
+            <tbody>
+              <tr><td>1</td><td>Installed firmware 身份</td><td><span class="badge blocked">BLOCKED</span> USB WCH bridge 身份不是 STM32 image 身份。</td><td>经授权的 SWD/JTAG/vendor read-back 或固件自身认证报告，绑定硬件 subtype、image hash/build、Flash 参数和车辆模式。</td></tr>
+              <tr><td>2</td><td>牵引能量独立隔离下 parser resync</td><td><span class="badge unverified">UNVERIFIED</span> 10×00 + exact-zero 只在软件/PTY 证明。</td><td>断路器打开、独立确认 actuator energy isolated；从 retained count/干扰前缀验证零-only sequence，记录原始字节和完整/部分写结果。</td></tr>
+              <tr><td>3</td><td>Unclean restart</td><td><span class="badge unverified">UNVERIFIED</span> SIGKILL/断连可留下未知半帧。</td><td>对正常退出、kill、拔插、host reboot、VCU reboot 做序列化测试；每次都不重放旧命令，恢复需新 generation、连续反馈、显式 re-arm。</td></tr>
+              <tr><td>4</td><td>Transport ownership</td><td><span class="badge unverified">UNVERIFIED</span> 当前设备 root:dialout 0660 且无 holder，但两条旧规则仍请求 0777。</td><td>管理员移除/加固旧 udev 规则；专用 service identity、受限组成员、禁用竞争厂家服务、每次 pre-open holder audit。</td></tr>
+              <tr><td>5</td><td>Post-open USB 绑定</td><td><span class="badge blocked">BLOCKED</span> devtmpfs 三向 identity 仍不能覆盖所有 hotplug/device-number reuse race。</td><td>allocation-free 的 post-open sysfs-object USB VID/PID/serial 绑定，或等价、经审查的不可替换身份机制。</td></tr>
+              <tr><td>6</td><td>Controller watchdog 与 loop ownership</td><td><span class="badge unverified">UNVERIFIED</span> 候选固件 SecurityLevel=1 可能在 UART 丢失后保留最后目标。</td><td>识别 installed 配置；测量命令丢失后的 controller 行为、timeout 和安全输出；若无可靠 watchdog，书面批准补偿控制和残余风险。</td></tr>
+              <tr><td>7</td><td>外部断电 / E-stop / restart durability</td><td><span class="badge blocked">BLOCKED</span> 软件 latch 在进程内，不证明重启前断言；硬件独立链未验收。</td><td>记录物理断电链对 VCU/执行器的作用与反馈；采用独立外部或 durable latch 策略，分别批准 readiness 与 safety disposition。</td></tr>
+              <tr><td>8</td><td>制动、holding 与 ground loaded</td><td><span class="badge unverified">UNVERIFIED</span> 架空轮 tail 不是制动距离/驻车能力。</td><td>受控地面验证普通减速、失联、零命令、断电、坡面保持、方向符号、转向 R≥0.95 m 和 0.50 m/s 目标前的 go/no-go。</td></tr>
+              <tr><td>9</td><td>FAST-LIVO2 实机</td><td><span class="badge blocked">BLOCKED</span> LiDAR 当前断电，真实 config 故意 fail closed。</td><td>测量 source/IMU→rear-axle 外参、发布频率/抖动、source-to-publish 延迟、一会话 world frame；随后做 known-map 路线验收。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>建议执行顺序</h3>
+        <ol>
+          <li><strong>仍不加牵引电：</strong>获取 installed firmware 身份方案和独立能量隔离检查方法；管理员清理 ownership/udev；补 post-open USB 绑定实现与测试。</li>
+          <li><strong>断路器打开、执行器能量独立确认：</strong>按已接受 ADR 0003 做专用 zero-only parser resync 与 unclean restart 证据。此阶段仍不得发送非零。</li>
+          <li><strong>架空并受控上电：</strong>确认物理 E-stop、控制器 watchdog、启动自检风险、command ownership、braking/hold 和符号；只有 reviewed go/no-go 后才讨论编译门变更。</li>
+          <li><strong>激光雷达上电：</strong>测外参、rate/jitter/latency 与 session frame；把实测值写入版本化 config。</li>
+          <li><strong>known-map 验收：</strong>先架空轮/台架，再受控地面；保持 0.50 m/s、0.20 m/s²、R≥0.95 m、禁止倒车和独立物理 E-stop。</li>
+        </ol>
+
+        <div class="callout danger">
+          <strong>编译门变更条件：</strong>在 installed firmware、parser/restart、ownership、watchdog、外部/durable E-stop、制动/holding 与地面控制等证据被审查前，<code>kPhysicalActuationReleaseEnabled</code> 必须保持 <code>false</code>。本 HTML 不构成打开该门的授权。
+        </div>
+      </section>
+
+      <section id="repos">
+        <h2>11. 六个已发布公共孵化仓与一个待决仓</h2>
+        <p class="lead">Apache-2.0 决策覆盖项目原创代码。core、interfaces、ROS 1 conversions、control、safety 和 vehicle 已作为六个独立 public incubation source 发布，严格锁定依赖的 Noetic/Focal Actions 均通过；每仓都已启用禁止创建 tag 的规则，当前 tag 与 release 均为 0。AUTO_ROVER 仍是唯一规范源，这些仓不获得独立 release authority，也不构成车辆安全认证。planning 因 ADR 0006 仍是 Proposed 而尚未创建。</p>
+        <p><strong>规范源提交：</strong><code>9e45299872be3e6e1f68107bf35713d87c87196c</code></p>
+        <p><strong>逐仓可复核证据：</strong><a href="../evidence/2026-08-12-reusable-module-publication.md">2026-08-12 reusable-module publication record</a>，包含完整 commit、tree、文件 listing、依赖 pin、Actions 与远端规则集事实。</p>
+
+        <div class="repo-grid">
+          <article class="card"><h3><a href="https://github.com/niuma-phd/auto-rover-core">auto-rover-core</a></h3><p>ROS-API-free 领域类型、校验和几何。仍含 NUC Phase-1 policy，不宣称是通用 Ackermann 标准。</p><p><span class="badge pass">PUBLIC · CI PASS</span> <code>9576411</code>；无内部依赖。<a href="https://github.com/niuma-phd/auto-rover-core/actions/runs/31515226786">Actions 证据</a>。</p></article>
+          <article class="card"><h3><a href="https://github.com/niuma-phd/auto-rover-interfaces">auto-rover-interfaces</a></h3><p>ROS 1 Noetic 的 9 个消息与 4 个服务。未来 breaking semantic/layout change 必须走 V2 + converter。</p><p><span class="badge pass">PUBLIC · CI PASS</span> <code>511eafe</code>；无 AUTO_ROVER 内部依赖。<a href="https://github.com/niuma-phd/auto-rover-interfaces/actions/runs/31515876070">Actions 证据</a>。</p></article>
+          <article class="card"><h3><a href="https://github.com/niuma-phd/auto-rover-ros1-conversions">auto-rover-ros1-conversions</a></h3><p>核心类型与 ROS 1 合同的显式转换；不负责 freshness。</p><p><span class="badge pass">PUBLIC · CI PASS</span> <code>22a88a0</code>；依赖 commit-pinned core + interfaces。<a href="https://github.com/niuma-phd/auto-rover-ros1-conversions/actions/runs/31517120210">Actions 证据</a>。</p></article>
+          <article class="card card-warning"><h3>auto-rover-planning</h3><p>严格 YAML route repository 与 Hermite trajectory generation；不含地图、探索或避障。</p><p><span class="badge blocked">NOT CREATED</span> ADR 0006 仍为 Proposed；只有 repository owner 明确接受资源合同并形成 reviewed canonical commit 后才发布。</p></article>
+          <article class="card"><h3><a href="https://github.com/niuma-phd/auto-rover-control">auto-rover-control</a></h3><p>Pure Pursuit、动态前视、停止曲线、SafetyState 授权反馈；MotionReference 不是 actuation authorization。</p><p><span class="badge pass">PUBLIC · CI PASS</span> <code>2a572d2</code>；依赖 commit-pinned core + interfaces + conversions。<a href="https://github.com/niuma-phd/auto-rover-control/actions/runs/31518799131">Actions 证据</a>。</p></article>
+          <article class="card"><h3><a href="https://github.com/niuma-phd/auto-rover-safety">auto-rover-safety</a></h3><p>SafetySupervisor 与 CommandGuard；不是功能安全产品，也不替代硬件 E-stop。</p><p><span class="badge pass">PUBLIC · CI PASS</span> <code>6845b5b</code>；依赖 commit-pinned core。<a href="https://github.com/niuma-phd/auto-rover-safety/actions/runs/31516264358">Actions 证据</a>。</p></article>
+          <article class="card"><h3><a href="https://github.com/niuma-phd/auto-rover-vehicle">auto-rover-vehicle</a></h3><p>通用 VehicleBackend、执行核心、运动管理器与 FakeVcu；不包含任何厂商协议。</p><p><span class="badge pass">PUBLIC · CI PASS</span> <code>1ed2364</code>；依赖 commit-pinned core + interfaces + conversions + safety。<a href="https://github.com/niuma-phd/auto-rover-vehicle/actions/runs/31518583722">Actions 证据</a>。</p></article>
+        </div>
+
+        <h3>为什么另外三个包不在首批复用清单</h3>
+        <div class="grid-3">
+          <article class="card card-warning"><h4>auto_rover_localization</h4><p>暂缓。外部 FAST-LIVO2 checkout 的 BSD/GPL-2.0-only 元数据存在冲突，且实机外参/rate/latency 未验收。</p></article>
+          <article class="card card-danger"><h4>Wheeltec adapter</h4><p>暂缓。涉及无再分发许可的厂家固件证据、installed image 不明、parser/restart、watchdog、E-stop、制动和 ground readiness。</p></article>
+          <article class="card card-blue"><h4>known_map_bringup</h4><p>不抽取。它是 NUC Ackermann 专用应用组合，含路线、车辆 profile、launch 和部署选择，不是通用算法模块。</p></article>
+        </div>
+
+        <p class="small muted">每个孵化仓只允许导出清单指定的 package source、package-specific tests、LICENSE 与最小 README/provenance/contracts/dependency pins/CI；排除现场证据、设备身份、应用配置、厂家资料、二进制和跨包集成测试。</p>
+      </section>
+
+      <section id="mission">
+        <h2>12. 最终如何实现整个任务</h2>
+        <p class="lead">当物理门逐项关闭并获得正式放行后，系统完成一次已知路线任务的运行链如下。它没有隐式模式切换，也没有绕过安全边界的快捷通道。</p>
+
+        <ol class="flow-list">
+          <li><strong>准备路线：</strong>操作员在 <code>waypoints.yaml</code> 中给出同一 <code>camera_init</code> 会话下的已知航点、yaw 和不超过 0.50 m/s 的前向目标，并提高 <code>plan_version</code>。</li>
+          <li><strong>建立定位：</strong>FAST-LIVO2 发布 <code>/aft_mapped_to_init</code>；定位 adapter 用实测 <code>source_T_rear</code> 转成后轴中心 <code>/ego_state</code>，保留 publish-time 和 receipt-time 的差异。</li>
+          <li><strong>生成轨迹：</strong>route planner 把 YAML 解析为域内 RoutePlan，验证 schema/frame/version/profile 后生成曲率可行的 Hermite <code>/trajectory</code>。</li>
+          <li><strong>建立健康状态：</strong>后端反馈 <code>/chassis_state</code>；VehicleExecutionCore 在启动零状态下观察 Ego/Trajectory/Motion/Chassis 和后端 health，积累连续新鲜恢复样本，发布 DISARMED <code>/safety_state</code>。</li>
+          <li><strong>显式授权：</strong>操作员带当前 safety generation 调用 <code>/arm_vehicle</code>。第一次 ARMED controller update 仍输出零，只建立新的加速度斜坡原点。</li>
+          <li><strong>跟踪：</strong>Pure Pursuit 选动态前视点，算后轴曲率与停车速度，以 0.20 m/s² 斜坡产生 <code>/motion_reference</code>；CommandGuard 再次检查 freshness、限值、方向、身份与 SafetyState。</li>
+          <li><strong>执行：</strong>VehicleMotionManager 形成进程内 <code>VehicleExecutionCommand</code>。所选后端检查自己的 generation/deadline/watchdog；Wheeltec adapter 才在最外层把它变成候选 11B 串口帧。</li>
+          <li><strong>闭环与停止：</strong>底盘反馈回到 ChassisState、定位和 tracker；终点按剩余距离减速，实测静止后 route_complete=true 并持续 exact-zero/hold。故障、过期、断开、E-stop 或重启都撤权，不自动恢复旧运动。</li>
+        </ol>
+
+        <div class="callout">
+          <strong>一句话总结：</strong>规划负责“想走哪条几何路线”，控制负责“希望以多大速度和曲率跟踪”，安全/车辆执行负责“现在是否允许、以什么受限命令执行”，VCU adapter 只负责“如何把已检查命令变成特定协议并把反馈归一化”。这四种责任没有混在一起。
+        </div>
+      </section>
+
+      <section id="references">
+        <h2>13. 事实来源与进一步阅读</h2>
+        <p>本文是下列规范、ADR、源码和验收记录的中文整合视图；冲突时以仓库中的合同、ADR 与实际代码为准。</p>
+        <ul class="source-list">
+          <li><a href="../../AGENTS.md">根 AGENTS.md：Phase-1、依赖与安全政策</a></li>
+          <li><a href="../../ARCHITECTURE.md">根 ARCHITECTURE.md：总体分层</a></li>
+          <li><a href="nuc_ackermann_phase1_handoff.md">NUC Ackermann Phase-1 交接</a></li>
+          <li><a href="../interfaces/nuc-ackermann-phase1-contracts.md">Phase-1 接口合同</a></li>
+          <li><a href="../adr/0001-nuc-ackermann-phase1-contracts-and-safety.md">ADR 0001：合同与安全边界（Proposed）</a></li>
+          <li><a href="../adr/0002-wheeltec-experimental-raw-profile-capture.md">ADR 0002：实验 raw profile（Proposed）</a></li>
+          <li><a href="../adr/0003-wheeltec-power-isolated-parser-recovery.md">ADR 0003：断电隔离 parser recovery（Accepted）</a></li>
+          <li><a href="../adr/0004-pure-pursuit-safety-authorization-feedback.md">ADR 0004：Pure Pursuit 安全授权反馈（Accepted）</a></li>
+          <li><a href="../adr/0005-apache-2.0-license-and-reusable-module-publication.md">ADR 0005：Apache-2.0 与模块发布（Accepted）</a></li>
+          <li><a href="../adr/0006-bounded-known-map-planning-resources.md">ADR 0006：已知地图 planning 资源边界（Proposed）</a></li>
+          <li><a href="../evidence/2026-08-11-nuc-ackermann-software-verification.md">软件验证记录</a></li>
+          <li><a href="../evidence/2026-08-11-wheeltec-power-isolated-passive-follow-up.md">VCU USB 供电、牵引断电的只读跟进证据</a></li>
+          <li><a href="../vehicles/vcu-adapter-readiness.md">VCU adapter readiness checklist</a></li>
+          <li><a href="../governance/reusable-module-publication-manifest.md">七仓导出与发布清单</a></li>
+          <li><a href="../evidence/2026-08-12-reusable-module-publication.md">六个 public incubation 仓的逐仓发布证据</a></li>
+          <li><a href="../../src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/README.md">Wheeltec candidate adapter 详细说明</a></li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>AUTO_ROVER · NUC Ackermann Phase-1 · 单文件离线文档 · 无 CDN、无 JavaScript、无外部字体或图片依赖</p>
+    </footer>
+  </div>
+</body>
+</html>

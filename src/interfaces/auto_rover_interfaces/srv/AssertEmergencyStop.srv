@@ -1,0 +1,9 @@
+uint32 schema_version
+time source_stamp
+string request_id
+string source_id
+---
+bool success
+string reason
+uint8 safety_mode
+uint64 latch_generation

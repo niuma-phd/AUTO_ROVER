@@ -16,6 +16,7 @@ flowchart LR
     Adapter -->|ChassisState| Tracker
     Adapter -->|ChassisState| Guard["Command guard + vehicle motion manager"]
     Tracker -->|MotionReference| Guard
+    Safety -->|SafetyState authorization feedback| Tracker
     Safety["Safety supervisor"] -->|"stop / inhibit"| Guard
     Guard -->|VehicleExecutionCommand| Adapter
     Adapter -->|"CAN, serial, Twist, or steering command"| VCU["VCU inner loop"]
@@ -26,9 +27,12 @@ The deployed phase-1 path is:
 
 `RoutePlan -> Trajectory -> MotionReference -> Command guard + vehicle motion manager -> VehicleExecutionCommand -> VCU adapter -> VCU`.
 
-`EgoState` and normalized `ChassisState` close the loop. The tracker never
-emits a vendor protocol frame, and the adapter never receives unchecked tracker
-output.
+`EgoState`, normalized `ChassisState`, and the software supervisor's
+`SafetyState` authorization feedback close the loop.  A non-armed safety mode
+holds a valid zero reference and resets the tracker ramp; missing, stale, or
+invalid safety feedback fails closed.  This software authorization never
+fabricates VCU enable feedback.  The tracker never emits a vendor protocol
+frame, and the adapter never receives unchecked tracker output.
 
 ## Scope and boundaries
 

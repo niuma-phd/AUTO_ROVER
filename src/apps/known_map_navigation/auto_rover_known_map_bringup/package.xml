@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>auto_rover_known_map_bringup</name>
+  <version>0.1.0</version>
+  <description>Default-safe known-map navigation composition for the NUC Ackermann vehicle.</description>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <exec_depend>auto_rover_control</exec_depend>
+  <exec_depend>auto_rover_interfaces</exec_depend>
+  <exec_depend>auto_rover_localization</exec_depend>
+  <exec_depend>auto_rover_planning</exec_depend>
+  <exec_depend>auto_rover_vehicle</exec_depend>
+  <exec_depend>auto_rover_vcu_wheeltec_serial</exec_depend>
+  <exec_depend>nav_msgs</exec_depend>
+  <exec_depend>roslaunch</exec_depend>
+  <exec_depend>rospy</exec_depend>
+
+  <test_depend>auto_rover_interfaces</test_depend>
+  <test_depend>auto_rover_control</test_depend>
+  <test_depend>auto_rover_localization</test_depend>
+  <test_depend>auto_rover_planning</test_depend>
+  <test_depend>auto_rover_vehicle</test_depend>
+  <test_depend>nav_msgs</test_depend>
+  <test_depend>rostest</test_depend>
+  <test_depend>rospy</test_depend>
+  <test_depend>std_srvs</test_depend>
+  <export />
+</package>

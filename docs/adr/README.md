@@ -62,3 +62,12 @@ authority merely by contributing to the change.
 The [documentation index](../README.md) defines authority precedence. The newest
 relevant accepted ADR wins over the approved architecture baseline, and any
 conflict must be repaired rather than left for readers to reconcile.
+
+## Records
+
+- [ADR 0001: NUC Ackermann phase-1 contracts and safety boundary](0001-nuc-ackermann-phase1-contracts-and-safety.md)
+- [ADR 0002: Wheeltec experimental raw-profile capture boundary](0002-wheeltec-experimental-raw-profile-capture.md)
+- [ADR 0003: Wheeltec power-isolated parser recovery and release sequencing](0003-wheeltec-power-isolated-parser-recovery.md)
+- [ADR 0004: Pure Pursuit software-safety authorization feedback](0004-pure-pursuit-safety-authorization-feedback.md)
+- [ADR 0005: Apache-2.0 license and reusable-module publication](0005-apache-2.0-license-and-reusable-module-publication.md)
+- [ADR 0006: Bounded known-map planning resources](0006-bounded-known-map-planning-resources.md)

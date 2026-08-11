@@ -66,26 +66,42 @@ Security advisories for pinned dependencies are triaged by the recorded owner.
 Because Ubuntu 20.04 and ROS 1 Noetic are outside normal standard support, an
 unchanged pin is not evidence that a deployed dependency remains acceptable.
 
-## Project-license decision gate
+## Project license and distribution
 
-The absence of a project-level `LICENSE` file is intentional. No AUTO_ROVER
-open-source license has been selected yet, so ordinary copyright law currently
-reserves reuse rights while each external dependency retains its own license.
+[ADR 0005](../adr/0005-apache-2.0-license-and-reusable-module-publication.md)
+closes the project-license decision gate. AUTO_ROVER-originated source code,
+interfaces, documentation, tests, launch files, and configuration files are
+available under the root Apache License 2.0. Contributions intentionally
+submitted for inclusion are governed by section 5 of that license unless they
+are conspicuously marked otherwise or covered by a separate written agreement.
 
-Before third-party source is copied or modified in the repository, and before
-AUTO_ROVER is distributed under an open-source license, an accepted license ADR
-must establish:
+The project license reaches only rights held by the applicable contributors. It
+does not relicense dependencies, linked system libraries, separately running
+providers, vendor source or firmware, trademarks, operator-supplied artifacts,
+recorded facts, or content of uncertain provenance. File-level notices and the
+dependency register take precedence for those materials. Unresolved provenance
+or license compatibility fails closed for copying, bundling, and redistribution.
 
-- the intended users and distribution model;
-- compatibility with every recorded dependency and planned contribution;
-- attribution, patent, source-disclosure, and redistribution obligations;
-- treatment of vehicle-vendor material, recorded data, and generated artifacts;
-  and
-- the owner and process for ongoing compliance.
+Apache-2.0 source and object redistribution includes the license, marks modified
+files, retains applicable copyright, patent, trademark, and attribution notices,
+and carries forward any applicable upstream `NOTICE` content. A container,
+binary, firmware bundle, dataset, or generated artifact receives its own
+complete dependency and source-obligation review; the root license alone is not
+a release checklist.
 
-The repository owner is the license decision authority unless the owner
-explicitly delegates that authority in the ADR pull request or linked issue.
-The ADR links the license review and approval evidence. Its implementation adds
-the actual license text and updates contributor, dependency, and release policy
-in the same change. A dummy, incomplete, or assumed license file must not be
-added before the gate closes.
+Reusable-package publications use a reviewed, bounded export manifest and
+record the exact AUTO_ROVER source commit. They include package-specific source,
+tests, documentation, license text, dependency/maturity notes, and applicable
+notices. They exclude vehicle-specific bringup and deployment configuration,
+local or field evidence, raw recordings, generated artifacts, binaries, secrets
+and device identities, supplied vendor firmware or archives, copied third-party
+source, external checkouts, and any unreviewed material. AUTO_ROVER remains the
+canonical integration and acceptance source until another accepted ADR assigns
+independent release authority.
+
+The repository owner is the license decision and ongoing compliance authority
+unless that authority is explicitly delegated in a pull request or linked
+issue. Every dependency or distribution change updates the durable register,
+identifies its operational owner and license reviewer, and links approval
+evidence. Public visibility, an Apache-2.0 manifest, or a successful build is not
+evidence of vehicle safety readiness.

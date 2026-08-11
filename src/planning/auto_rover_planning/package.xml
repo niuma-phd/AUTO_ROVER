@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>auto_rover_planning</name>
+  <version>0.1.0</version>
+  <description>ROS-independent strict route loading and trajectory generation.</description>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>auto_rover_core</depend>
+  <depend>auto_rover_interfaces</depend>
+  <depend>auto_rover_ros1_conversions</depend>
+  <depend>roscpp</depend>
+  <depend>yaml-cpp</depend>
+  <test_depend>gtest</test_depend>
+  <export />
+</package>

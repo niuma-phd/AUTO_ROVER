@@ -1,0 +1,55 @@
+schema_version: 1
+vehicle_id: nuc_senior_akm
+profile_id: nuc_senior_akm_v1
+kinematic_model: ackermann_bicycle
+direction_capability: signed_speed_direction
+reference_point: rear_axle_center
+status: UNVERIFIED
+
+geometry:
+  wheelbase_m: 0.3187
+  rear_track_m: null
+  front_track_m: null
+  overall_length_m: 0.4447
+  overall_width_m: 0.3620
+  wheel_diameter_m: 0.1250
+  wheel_tread_width_m: 0.0408
+  ground_clearance_m: 0.0400
+  body_x_min_from_reference_m: -0.0630
+  body_x_max_from_reference_m: 0.3817
+  front_overhang_m: 0.0630
+  rear_overhang_m: 0.0630
+
+footprints:
+  catalog_body_envelope_xy_m:
+    - [-0.0630, -0.1810]
+    - [0.3817, -0.1810]
+    - [0.3817, 0.1810]
+    - [-0.0630, 0.1810]
+  initial_operational_xy_m:
+    - [-0.0900, -0.1850]
+    - [0.4000, -0.1850]
+    - [0.4000, 0.1850]
+    - [-0.0900, 0.1850]
+
+limits:
+  initial_max_forward_speed_mps: 0.50
+  initial_max_longitudinal_accel_mps2: 0.20
+  operational_min_turning_radius_m: 0.95
+  catalog_min_turning_radius_m: 0.80
+  verified_hardware_min_turning_radius_m: null
+  reverse_supported: false
+
+commissioning:
+  bench_forward_target_mps: 0.50
+  ground_forward_target_mps: 0.50
+  historical_ground_fallback_mps: 0.35
+  measured_start_deadband_mps: null
+  measured_stop_deadband_mps: null
+  ground_target_requires_bench_gate_and_explicit_go_no_go: true
+
+provenance:
+  wheelbase: catalog_and_cad_unmeasured
+  envelope: catalog_and_cad_unmeasured
+  operational_radius: phase1_approved_conservative_value
+  catalog_radius: definition_unknown
