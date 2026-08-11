@@ -322,14 +322,18 @@ a run. Metadata labels these fields observation-only and
 `acceptance_evidence=false`. The feedback format has no observed source
 timestamp; all event times are host `CLOCK_MONOTONIC` receipt times.
 
-After a successful physical open, the first transport transaction is a
-pre-encoded exact-zero write with no evidence allocation. It must complete
-within the bounded retry/deadline policy before any read. The core repeats
-normal exact zero to establish its wire-slew baseline, then drains bounded
-serial backlog. Motion remains zero until at least five distinct, strictly
-increasing valid `FlagStop=0` read receipts span at least 0.20 seconds. Multiple
-valid frames in one read count as one receipt. Parser noise and malformed
-`FlagStop` values do not count and do not refresh freshness.
+After a successful physical open, the first transport transaction is ten
+`0x00` parser-resynchronization bytes, followed by one pre-encoded exact-zero
+command candidate, with no evidence allocation or intervening read. The whole
+zero-only sequence must complete within the bounded retry/deadline policy
+before any session I/O. Its v1 startup record retains the historic record type
+but new captures separately report padding completion, exact-zero completion,
+recovery restarts, and stream poison. The core then repeats normal exact zero
+to establish its wire-slew baseline and drains bounded serial backlog. Motion
+remains zero until at least five distinct, strictly increasing valid
+`FlagStop=0` read receipts span at least 0.20 seconds. Multiple valid frames in
+one read count as one receipt. Parser noise and malformed `FlagStop` values do
+not count and do not refresh freshness.
 
 Valid feedback remains mandatory within 150 ms. A valid `FlagStop=1` frame,
 invalid/non-finite decoded semantics, serial disconnect, failed or partial
@@ -402,12 +406,14 @@ replace that independent chain.
 does not reopen a path. A remount requires a caller-supplied connected
 transport with a strictly newer generation; parser state, authorization,
 cached motion, feedback recovery, and startup evidence are cleared, while
-sequence and authorization high-water marks survive. The first transport I/O
-of every enabled generation is a bounded exact-zero full host write. Reads are
-forbidden until that succeeds, and opening backlog is then drained separately.
-A partial or otherwise unknown-prefix write poisons that generation: no later
-revoke, shutdown, or retry appends another frame. Only a known zero-byte
-non-delivery may use the configured bounded whole-frame retry policy.
+sequence and authorization high-water marks survive. Before a physical
+transport is mounted, every write-enabled caller performs the common ten-zero
+padding plus exact-zero activation. The runtime's first own transport I/O is a
+second bounded exact-zero full host write. Reads are forbidden until that
+succeeds, and opening backlog is then drained separately. A partial or
+otherwise unknown-prefix write poisons that generation: no later revoke,
+shutdown, or retry appends another frame. Only a known zero-byte non-delivery
+may use the configured bounded whole-frame retry policy.
 
 That reset applies only to the host receive parser. The reviewed MCU command
 callback retains a function-static partial 11-byte receive count across a
@@ -448,6 +454,21 @@ ROS entry, and terminates the node. The wrapper accepts at most 4096 trajectory
 points, 256 bytes per semantic identifier, and 1024 retired identities per
 tracked source class. These are execution-work bounds, not vehicle dynamics
 limits.
+
+Worker-cycle safety output and synchronous arm, disarm, emergency-stop, and
+reset output share one publication ordering high-water mark. A direct
+transition clears any pending pre-transition cycle while the execution core is
+still locked, then reserves its state ID, latch generation, and source stamp.
+Direct and cycle paths serialize the actual safety ROS publish, and a cycle
+already taken from the mailbox must reclaim against that reservation inside the
+publish mutex. A delayed lower-generation worker result is dropped, so an old
+`ARMED` cycle cannot be published after emergency stop and a pre-arm/pre-reset
+generation cannot roll back the controller's required safety feedback.
+Unorderable tuples and semantic changes under a reused identity are suppressed.
+Direct callbacks release the execution-core lock before entering the publish
+mutex; the worker still uses only a nonblocking mailbox acquisition and never
+enters that mutex, so this ordering barrier adds no blocking operation to its
+physical watchdog path.
 
 ## Candidate command encoding
 
@@ -541,13 +562,20 @@ serial. It rejects symlinks in every path component, non-character devices,
 non-TTYs, changed pre-open/post-open identities, executable or world-accessible
 device modes, and unexpected owner/group. The open uses `O_NOFOLLOW`,
 `O_NOCTTY`, `O_NONBLOCK`, and `O_CLOEXEC`, plus `O_RDONLY` for feedback-only or
-`O_RDWR` only for three-gate actuation access. After `fstat`, it applies
-`TIOCEXCL`, resolves `/sys/dev/char/<major>:<minor>/device` below
-`/sys/devices`, and requires all three USB attributes at one common ancestor.
-Any absent or mismatched identity fails closed. Raw 115200 8N1 with no flow
-control is applied only after identity verification, then read back and checked
-field by field. These remain candidate host settings, not a verified physical
-contract.
+`O_RDWR` only for three-gate actuation access. During allocation-permitted
+preparation it resolves `/sys/dev/char/<major>:<minor>/device` below
+`/sys/devices` and requires all three USB attributes at one common ancestor.
+After raw open and `fstat`, it repeats the component-wise no-symlink `/dev`
+identity observation and requires before/fd/after equality before `flock`,
+`TIOCEXCL`, or termios configuration. Any absent or mismatched observation
+fails closed. USB attributes are not currently reread after raw open; the
+three-way devtmpfs identity detects node replacement but is not treated as a
+general proof of post-open USB ownership across every hotplug race. That
+allocation-free sysfs-binding proof or equivalent reviewed evidence remains a
+release blocker while the compile gate is false. Raw 115200 8N1 with no flow
+control is applied only after file-identity verification, then read back and
+checked field by field. These remain candidate host settings, not a verified
+physical contract.
 
 The reviewed firmware source does not provide a controller-side stop guarantee
 that this host may rely on. Its initialized `SecurityLevel` is 1, for which the

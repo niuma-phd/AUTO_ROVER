@@ -5,6 +5,7 @@
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
+#include <vector>
 
 #include "auto_rover_core/types.hpp"
 
@@ -22,6 +23,7 @@ struct PurePursuitConfig {
   std::int64_t localization_freshness_ns{0};
   std::int64_t trajectory_freshness_ns{0};
   std::int64_t chassis_freshness_ns{0};
+  std::int64_t safety_freshness_ns{0};
   std::int64_t motion_valid_for_ns{0};
 };
 
@@ -29,6 +31,7 @@ struct TrackingInput {
   auto_rover::Received<auto_rover::Trajectory> trajectory;
   auto_rover::Received<auto_rover::EgoState> ego;
   auto_rover::Received<auto_rover::ChassisState> chassis;
+  auto_rover::Received<auto_rover::SafetyState> safety;
   std::int64_t now_monotonic_ns{0};
   std::int64_t now_ros_ns{0};
 };
@@ -74,6 +77,17 @@ class PurePursuit {
     std::unordered_map<std::string, std::uint64_t> highest_plan_versions;
   };
 
+  struct SafetyStateOrder {
+    bool initialized{false};
+    bool compromised{false};
+    std::uint64_t state_id{0U};
+    std::uint64_t latch_generation{0U};
+    std::int64_t stamp_ns{0};
+    std::int64_t receipt_monotonic_ns{0};
+    auto_rover::SafetyMode mode{auto_rover::SafetyMode::kBootInhibited};
+    std::vector<auto_rover::StopReason> reasons;
+  };
+
   TrackingResult invalidResult(const TrackingInput& input,
                                const std::string& reason);
   auto_rover::MotionReference makeReference(const TrackingInput& input,
@@ -90,6 +104,9 @@ class PurePursuit {
       RequiredStateOrder* order);
   auto_rover::ValidationResult observeTrajectoryOrder(
       const auto_rover::Trajectory& trajectory);
+  auto_rover::ValidationResult observeSafetyStateOrder(
+      const auto_rover::SafetyState& safety,
+      std::int64_t receipt_monotonic_ns);
 
   PurePursuitConfig config_;
   auto_rover::VehicleProfile vehicle_profile_;
@@ -98,10 +115,13 @@ class PurePursuit {
   std::uint64_t next_command_id_{1U};
   std::int64_t last_update_monotonic_ns_{0};
   double last_commanded_speed_mps_{0.0};
-  bool control_enable_observed_{false};
+  std::string active_chassis_source_id_;
+  bool control_enable_capability_observed_{false};
+  bool execution_enable_observed_{false};
   RequiredStateOrder ego_order_;
   RequiredStateOrder chassis_order_;
   TrajectoryOrder trajectory_order_;
+  SafetyStateOrder safety_order_;
 };
 
 }  // namespace auto_rover_control

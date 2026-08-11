@@ -25,8 +25,14 @@ or local avoidance, autonomous exploration, field-coverage planning on the
 vehicle, empty ROS packages, or ROS 2 packages. It also does not assume a
 universal VCU protocol or replace a VCU's existing encoder-level control loop.
 
-No public source license has been selected. Do not copy, modify, or redistribute
-third-party source into this repository until the licensing decision is recorded.
+AUTO_ROVER-originated work is licensed under the
+[Apache License 2.0](LICENSE), as accepted by
+[ADR 0005](docs/adr/0005-apache-2.0-license-and-reusable-module-publication.md).
+Third-party and vendor material retains its own license and must pass the
+[dependency and licensing review](docs/governance/dependencies-and-licensing.md)
+before it is copied, modified, bundled, or redistributed. The project license
+does not grant rights in supplied firmware, external providers, recordings, or
+other material that AUTO_ROVER contributors do not own.
 
 ## Support warning
 

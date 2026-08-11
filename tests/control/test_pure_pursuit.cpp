@@ -57,6 +57,7 @@ auto_rover_control::PurePursuitConfig config() {
   value.localization_freshness_ns = 200000000LL;
   value.trajectory_freshness_ns = 500000000LL;
   value.chassis_freshness_ns = 200000000LL;
+  value.safety_freshness_ns = 200000000LL;
   value.motion_valid_for_ns = 100000000LL;
   return value;
 }
@@ -116,6 +117,18 @@ auto_rover::ChassisState chassis(double speed, bool control_enabled = true,
   return value;
 }
 
+auto_rover::SafetyState safety(
+    auto_rover::SafetyMode mode = auto_rover::SafetyMode::kArmed) {
+  auto_rover::SafetyState value;
+  value.stamp_ns = 1000000000LL;
+  value.state_id = 1U;
+  value.mode = mode;
+  value.latch_generation = 0U;
+  value.valid_for_ns = 200000000LL;
+  value.valid = true;
+  return value;
+}
+
 auto_rover_control::TrackingInput input(const auto_rover::Trajectory& trajectory,
                                         const auto_rover::EgoState& ego_state,
                                         const auto_rover::ChassisState& state,
@@ -126,6 +139,7 @@ auto_rover_control::TrackingInput input(const auto_rover::Trajectory& trajectory
   value.trajectory = {trajectory, receipt};
   value.ego = {ego_state, receipt};
   value.chassis = {state, receipt};
+  value.safety = {safety(), receipt};
   // The common fixtures model a fresh producer callback on every helper call.
   // Keep their semantic identities advancing with the new local receipt. Tests
   // that exercise ordering use explicit, non-default identities below.
@@ -139,6 +153,8 @@ auto_rover_control::TrackingInput input(const auto_rover::Trajectory& trajectory
     value.chassis.value.state_id = static_cast<std::uint64_t>(receipt);
     value.chassis.value.stamp_ns = ros_now;
   }
+  value.safety.value.state_id = static_cast<std::uint64_t>(receipt);
+  value.safety.value.stamp_ns = ros_now;
   value.now_monotonic_ns = monotonic_now;
   value.now_ros_ns = ros_now;
   return value;
@@ -155,6 +171,10 @@ void testConfiguration() {
   invalid.producer_generation_id.clear();
   expect(!auto_rover_control::validatePurePursuitConfig(invalid).ok,
          "missing producer generation fails closed");
+  invalid = config();
+  invalid.safety_freshness_ns = 0;
+  expect(!auto_rover_control::validatePurePursuitConfig(invalid).ok,
+         "missing safety freshness limit fails closed");
 }
 
 void testStraightRampAndStop() {
@@ -251,7 +271,265 @@ void testDisabledControlHoldsAndRestartsRampFromZero() {
       trajectory, ego(0.0, 0.0, 0.0), chassis(0.0, false, false),
       2350000000LL, 2350000000LL));
   expect(!unavailable.reference.valid,
-         "unsubstantiated control-enable feedback fails closed");
+         "a previously observed control-enable capability cannot disappear");
+}
+
+void testSafetyAuthorizationModesHoldAndRestartRampFromZero() {
+  auto_rover_control::PurePursuit tracker(config(), profile());
+  const auto trajectory = straightTrajectory();
+  std::int64_t now = 1050000000LL;
+
+  expectNear(tracker.update(input(trajectory, ego(0.0, 0.0, 0.0),
+                                  chassis(0.0), now, now))
+                 .reference.target_speed_mps,
+             0.0, 1e-12,
+             "first armed safety sample establishes a zero ramp origin");
+  now += 100000000LL;
+  expectNear(tracker.update(input(trajectory, ego(0.0, 0.0, 0.0),
+                                  chassis(0.0), now, now))
+                 .reference.target_speed_mps,
+             0.02, 1e-12, "armed safety permits the bounded reference ramp");
+
+  const auto_rover::SafetyMode inhibited_modes[] = {
+      auto_rover::SafetyMode::kBootInhibited,
+      auto_rover::SafetyMode::kDisarmed,
+      auto_rover::SafetyMode::kRecoveryInhibited,
+      auto_rover::SafetyMode::kFaultInhibited,
+      auto_rover::SafetyMode::kEmergencyStopLatched,
+  };
+  for (const auto mode : inhibited_modes) {
+    now += 100000000LL;
+    auto inhibited =
+        input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0), now, now);
+    inhibited.safety.value.mode = mode;
+    const auto hold = tracker.update(inhibited);
+    expect(hold.reference.valid,
+           "every non-armed valid safety mode produces a valid hold");
+    expectNear(hold.reference.target_speed_mps, 0.0, 1e-12,
+               "non-armed safety cannot accumulate a speed ramp");
+
+    now += 100000000LL;
+    const auto first_armed = tracker.update(
+        input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0), now, now));
+    expect(first_armed.reference.valid,
+           "a fresh armed safety transition remains a valid reference");
+    expectNear(first_armed.reference.target_speed_mps, 0.0, 1e-12,
+               "each armed transition re-establishes a zero ramp origin");
+
+    now += 100000000LL;
+    const auto ramp = tracker.update(
+        input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0), now, now));
+    expectNear(ramp.reference.target_speed_mps, 0.02, 1e-12,
+               "the post-arm ramp remains bounded at 0.20 m/s2");
+  }
+}
+
+void testUnavailableControlEnableCapabilityUsesOnlySoftwareSafetyState() {
+  auto_rover_control::PurePursuit tracker(config(), profile());
+  const auto trajectory = straightTrajectory();
+  auto unavailable = chassis(0.0, false, false);
+  unavailable.source_id =
+      "backend_without_enable_capability#process=generation-1";
+
+  const auto first = tracker.update(input(
+      trajectory, ego(0.0, 0.0, 0.0), unavailable, 1050000000LL,
+      1050000000LL));
+  expect(first.reference.valid,
+         "an armed software safety state permits a backend whose contract never provides control-enable feedback");
+  expectNear(first.reference.target_speed_mps, 0.0, 1e-12,
+             "missing optional VCU enable starts from an explicit zero");
+
+  const auto ramp = tracker.update(input(
+      trajectory, ego(0.0, 0.0, 0.0), unavailable, 1150000000LL,
+      1150000000LL));
+  expect(ramp.reference.valid, "the unavailable-capability path stays valid");
+  expectNear(ramp.reference.target_speed_mps, 0.02, 1e-12,
+             "software authorization still uses the Phase-1 acceleration limit");
+
+  auto capability_appears = chassis(0.0, true, true);
+  capability_appears.source_id = unavailable.source_id;
+  const auto newly_substantiated = tracker.update(input(
+      trajectory, ego(0.0, 0.0, 0.0), capability_appears, 1250000000LL,
+      1250000000LL));
+  expect(newly_substantiated.reference.valid,
+         "newly substantiated true VCU enable is accepted");
+  expectNear(newly_substantiated.reference.target_speed_mps, 0.0, 1e-12,
+             "new VCU enable evidence re-establishes the zero ramp origin");
+
+  const auto substantiated_ramp = tracker.update(input(
+      trajectory, ego(0.0, 0.0, 0.0), capability_appears, 1350000000LL,
+      1350000000LL));
+  expectNear(substantiated_ramp.reference.target_speed_mps, 0.02, 1e-12,
+             "substantiated VCU enable permits the bounded ramp");
+
+  const auto disappeared = tracker.update(input(
+      trajectory, ego(0.0, 0.0, 0.0), unavailable, 1450000000LL,
+      1450000000LL));
+  expect(!disappeared.reference.valid &&
+             contains(disappeared.reason, "capability disappeared"),
+         "control-enable validity disappearing within one chassis source fails closed");
+
+  auto new_source = unavailable;
+  new_source.source_id =
+      "backend_without_enable_capability#process=generation-2";
+  const auto restarted = tracker.update(input(
+      trajectory, ego(0.0, 0.0, 0.0), new_source, 1550000000LL,
+      1550000000LL));
+  expect(restarted.reference.valid,
+         "a new chassis source may establish its own unavailable capability contract");
+  expectNear(restarted.reference.target_speed_mps, 0.0, 1e-12,
+             "a new chassis source always restarts the reference ramp at zero");
+}
+
+void testSafetyStateFreshnessValidityAndOrderingFailClosed() {
+  const auto trajectory = straightTrajectory();
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto missing = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1050000000LL, 1050000000LL);
+    missing.safety.receipt_monotonic_ns = 0;
+    const auto result = tracker.update(missing);
+    expect(!result.reference.valid && contains(result.reason, "safety"),
+           "missing safety state fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto stale = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                       1300000000LL, 1300000000LL);
+    stale.safety.receipt_monotonic_ns = 1000000000LL;
+    const auto result = tracker.update(stale);
+    expect(!result.reference.valid && contains(result.reason, "safety"),
+           "stale safety receiver state fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto invalid = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1050000000LL, 1050000000LL);
+    invalid.safety.value.valid = false;
+    const auto result = tracker.update(invalid);
+    expect(!result.reference.valid && contains(result.reason, "safety"),
+           "invalid safety producer state fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto expired = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1150000000LL, 2000000000LL);
+    expired.safety.value.stamp_ns = 1000000000LL;
+    expired.safety.value.valid_for_ns = 500000000LL;
+    const auto result = tracker.update(expired);
+    expect(!result.reference.valid && contains(result.reason, "safety"),
+           "expired safety producer validity fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto initial = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1150000000LL, 1150000000LL);
+    initial.safety.value.state_id = 10U;
+    initial.safety.value.stamp_ns = 1100000000LL;
+    initial.safety.receipt_monotonic_ns = 1100000000LL;
+    expect(tracker.update(initial).reference.valid,
+           "initial ordered safety sample is accepted");
+
+    auto rollback = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                          1250000000LL, 1250000000LL);
+    rollback.safety.value.state_id = 9U;
+    rollback.safety.value.stamp_ns = 1200000000LL;
+    rollback.safety.receipt_monotonic_ns = 1200000000LL;
+    const auto result = tracker.update(rollback);
+    expect(!result.reference.valid &&
+               contains(result.reason, "safety state identity rolled back"),
+           "a later-received safety identity rollback fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto initial = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1150000000LL, 1150000000LL);
+    initial.safety.value.state_id = 10U;
+    initial.safety.value.stamp_ns = 1100000000LL;
+    initial.safety.value.valid_for_ns = 1000000000LL;
+    initial.safety.receipt_monotonic_ns = 1100000000LL;
+    tracker.update(initial);
+
+    auto rollback = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                          1250000000LL, 1250000000LL);
+    rollback.safety.value.state_id = 11U;
+    rollback.safety.value.stamp_ns = 1050000000LL;
+    rollback.safety.value.valid_for_ns = 1000000000LL;
+    rollback.safety.receipt_monotonic_ns = 1200000000LL;
+    const auto result = tracker.update(rollback);
+    expect(!result.reference.valid &&
+               contains(result.reason, "safety state source stamp rolled back"),
+           "safety source stamp rollback fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto initial = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1150000000LL, 1150000000LL);
+    initial.safety.value.state_id = 10U;
+    initial.safety.value.stamp_ns = 1100000000LL;
+    initial.safety.value.latch_generation = 2U;
+    initial.safety.receipt_monotonic_ns = 1100000000LL;
+    tracker.update(initial);
+
+    auto rollback = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                          1250000000LL, 1250000000LL);
+    rollback.safety.value.state_id = 11U;
+    rollback.safety.value.stamp_ns = 1200000000LL;
+    rollback.safety.value.latch_generation = 1U;
+    rollback.safety.receipt_monotonic_ns = 1200000000LL;
+    const auto result = tracker.update(rollback);
+    expect(!result.reference.valid &&
+               contains(result.reason, "safety latch generation rolled back"),
+           "safety latch-generation rollback fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto initial = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1150000000LL, 1150000000LL);
+    initial.safety.value.state_id = 10U;
+    initial.safety.value.stamp_ns = 1100000000LL;
+    initial.safety.receipt_monotonic_ns = 1100000000LL;
+    tracker.update(initial);
+
+    auto rollback = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                          1160000000LL, 1160000000LL);
+    rollback.safety.value.state_id = 11U;
+    rollback.safety.value.stamp_ns = 1150000000LL;
+    rollback.safety.receipt_monotonic_ns = 1090000000LL;
+    const auto result = tracker.update(rollback);
+    expect(!result.reference.valid &&
+               contains(result.reason, "safety state receipt time rolled back"),
+           "safety receipt-time rollback fails closed");
+  }
+
+  {
+    auto_rover_control::PurePursuit tracker(config(), profile());
+    auto initial = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                         1150000000LL, 1150000000LL);
+    initial.safety.value.state_id = 10U;
+    initial.safety.value.stamp_ns = 1100000000LL;
+    initial.safety.receipt_monotonic_ns = 1100000000LL;
+    tracker.update(initial);
+
+    auto replay = input(trajectory, ego(0.0, 0.0, 0.0), chassis(0.0),
+                        1250000000LL, 1250000000LL);
+    replay.safety.value.state_id = initial.safety.value.state_id;
+    replay.safety.value.stamp_ns = initial.safety.value.stamp_ns;
+    replay.safety.receipt_monotonic_ns = 1200000000LL;
+    const auto result = tracker.update(replay);
+    expect(!result.reference.valid &&
+               contains(result.reason,
+                        "safety semantic sample was replayed"),
+           "a retransmitted safety sample cannot refresh authorization");
+  }
 }
 
 void testGoalApproachRemainsValidWhileDecelerating() {
@@ -657,6 +935,9 @@ int main() {
   testStraightRampAndStop();
   testIndependentTrackerProcessesOwnIndependentCommandSequences();
   testDisabledControlHoldsAndRestartsRampFromZero();
+  testSafetyAuthorizationModesHoldAndRestartRampFromZero();
+  testUnavailableControlEnableCapabilityUsesOnlySoftwareSafetyState();
+  testSafetyStateFreshnessValidityAndOrderingFailClosed();
   testGoalApproachRemainsValidWhileDecelerating();
   testTurnSigns();
   testCurvatureAndFreshnessFailures();

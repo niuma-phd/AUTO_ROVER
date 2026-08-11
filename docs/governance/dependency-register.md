@@ -1,8 +1,12 @@
 # Dependency Register
 
-These records accompany the first phase-1 implementation. Approval evidence is
-pending review of the implementing pull request; no record here overrides the
-project-license gate or establishes vehicle readiness.
+These records accompany the first phase-1 implementation. The source/build
+dependencies explicitly marked Accepted below are approved for the bounded
+Apache-2.0 incubation publications authorized by
+[ADR 0005](../adr/0005-apache-2.0-license-and-reusable-module-publication.md).
+That approval does not relicense an external dependency, authorize bundling its
+source or binaries, establish deployment security, or establish vehicle
+readiness. Entries that remain Proposed or unresolved continue to fail closed.
 
 ## Wheeltec C50C firmware evidence artifact
 
@@ -70,7 +74,8 @@ The reproducible source audit is in
 
 ## yaml-cpp
 
-- Status: Proposed build/runtime dependency
+- Status: Accepted system build/runtime dependency for the planning source
+  incubation; no library or Debian packaging files are redistributed
 - Name and purpose: yaml-cpp, used only by the strict versioned waypoint loader
 - Upstream and source URL: `https://github.com/jbeder/yaml-cpp`
 - Revision: upstream tag `yaml-cpp-0.6.2`, commit
@@ -94,12 +99,14 @@ The reproducible source audit is in
   motion; unknown keys, malformed values, resource-expanding routes, and invalid
   geometry fail closed
 - Owner: niuma-phd
-- Approval evidence: pending repository-owner and license review in the
-  implementing pull request
+- Approval evidence: MIT/X11 system-linking review recorded here and bounded
+  publication approval in [issue #12](https://github.com/niuma-phd/AUTO_ROVER/issues/12)
 
 ## ROS 1 Noetic build and message runtime
 
-- Status: Proposed pinned target-platform dependency set
+- Status: Accepted pinned target-platform build/runtime dependency set for the
+  seven incubation source repositories; no ROS package source or binary is
+  copied into those repositories
 - Name and purpose: catkin, roscpp, roslaunch/rostest, message generation/runtime,
   and the standard geometry, navigation, and header message packages used only
   by thin ROS 1 wrappers
@@ -127,12 +134,16 @@ The reproducible source audit is in
 - Safety/security relevance: transports localization, route, control, safety,
   and vehicle feedback. Monotonic receiver watchdogs do not rely on ROS time.
 - Owner: niuma-phd
-- Approval evidence: pending repository-owner, dependency, and security review
-  in the implementing pull request
+- Approval evidence: installed-manifest and source-publication boundary review
+  recorded here, with bounded publication approval in
+  [issue #12](https://github.com/niuma-phd/AUTO_ROVER/issues/12). Ubuntu 20.04
+  and Noetic end-of-life risk remains a deployment-security blocker, not a
+  reason to replace the Phase-1 target silently.
 
 ## GoogleTest target-platform test library
 
-- Status: Proposed test-only dependency
+- Status: Accepted test-only system dependency for incubation CI; not a runtime
+  dependency and not redistributed by the source repositories
 - Name and purpose: GoogleTest for deterministic package and conversion tests
 - Upstream and source URL: `https://github.com/google/googletest`
 - Revision: Ubuntu package `libgtest-dev=1.10.0-2`, corresponding to upstream
@@ -148,5 +159,41 @@ The reproducible source audit is in
 - Safety/security relevance: none at runtime, but it supplies evidence for
   safety paths
 - Owner: niuma-phd
-- Approval evidence: pending repository-owner and dependency review in the
-  implementing pull request
+- Approval evidence: BSD-3-Clause test-linking review recorded here and bounded
+  publication approval in [issue #12](https://github.com/niuma-phd/AUTO_ROVER/issues/12)
+
+## Incubation publication CI inputs
+
+- Status: Accepted CI-only inputs for the seven source repositories
+- Name and purpose: GitHub-hosted Linux runner, `actions/checkout`, and an
+  official ROS Noetic/Focal container used to reproduce the target toolchain
+- Runner selector: `ubuntu-24.04`; this hosts the job only and is not treated as
+  the Phase-1 target platform
+- Checkout revision: `actions/checkout` commit
+  `3d3c42e5aac5ba805825da76410c181273ba90b1`; floating action tags are not
+  permitted
+- Container: `ros:noetic-ros-core-focal` amd64 manifest digest
+  `sha256:4c1435fd85be3edde3820f0d132ab30a6b030209dce4fa3ac428a2aa5a763caf`;
+  tags without this digest are not equivalent evidence
+- Dependency import tool: Ubuntu/ROS package `python3-vcstool=0.3.0-1`, used
+  only in dependent-module CI to materialize the full-commit pins in
+  `auto-rover.repos`
+- Direct CI utilities: `git=1:2.25.1-1ubuntu3.14`,
+  `make=4.2.1-1.2`, and
+  `ca-certificates=20240203~20.04.1`; package-scoped locks include only the
+  utilities each workflow directly invokes
+- License: the checkout action is MIT; the pulled Ubuntu/ROS image contains
+  packages under their own recorded licenses. The incubation repositories pull
+  the image for CI and do not publish, vendor, or relicense it.
+- Modifications and redistribution: none; the workflow installs only the exact
+  apt revisions in its package-scoped lock and does not upload a container,
+  binary, generated message tree, or package artifact
+- Platform fit: all build/test commands run inside Ubuntu 20.04 with ROS 1
+  Noetic even though the disposable GitHub runner host is newer
+- Security relevance: third-party CI is not trusted with vehicle credentials,
+  device access, field evidence, or physical actuation. Workflow permissions
+  are read-only, dependencies are full-commit/digest pinned, and no release or
+  tag job exists.
+- Owner: niuma-phd
+- Approval evidence: dependency/digest review recorded here and bounded source
+  publication approval in [issue #12](https://github.com/niuma-phd/AUTO_ROVER/issues/12)

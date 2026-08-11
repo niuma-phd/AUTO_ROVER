@@ -130,8 +130,9 @@ unclean-session evidence, plus the remaining watchdog/ownership/stop gates.
 With the default gates, backend initialization succeeds as an inhibited
 software state and performs no device open or transport I/O. The future
 identity-pinned activation path is prepared and tested with injected/PTTY
-transports: exact zero is its first serial I/O, followed by bounded backlog
-drain and a consecutive post-drain `FlagStop=0` recovery run before a new arm.
+transports: zero-only parser-resynchronization padding followed by an exact-zero
+frame is its first serial I/O, then bounded backlog drain and a consecutive
+post-drain `FlagStop=0` recovery run precede a new arm.
 The compiled release freeze prevents that path from acquiring a physical
 actuation fd in this revision. A batch containing any `FlagStop=1` is inhibited
 even if its newest frame says allowed. Terminal disconnect does not auto-reopen

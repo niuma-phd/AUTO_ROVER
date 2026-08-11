@@ -8,6 +8,7 @@ standstill_speed_threshold_mps: 0.01
 localization_freshness_ns: 200000000
 trajectory_freshness_ns: 300000000
 chassis_freshness_ns: 200000000
+safety_freshness_ns: 150000000
 motion_valid_for_ns: 100000000
 publish_period_s: 0.05
 scope: software_fixture_values_not_phase1_acceptance

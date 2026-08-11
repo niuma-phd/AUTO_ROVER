@@ -44,14 +44,43 @@ arguments, or caller opt-ins. The generic codec limit is a required finite
 parameter in `0 < v < 6.0 m/s`; the selected Phase-1 profile and launch remain
 `0.50 m/s`.
 
+The later
+[USB-powered passive follow-up](../evidence/2026-08-11-wheeltec-power-isolated-passive-follow-up.md)
+used an identity-pinned `O_RDONLY` capture while the operator reported vehicle
+traction power and LiDAR power off.  It transmitted no bytes and observed 612
+accepted frames in 30 seconds; every frame retained `FlagStop=1`.  This closes
+only the available power-off passive observation.  It does not identify the
+installed STM32 image or prove external motor-bus isolation, parser recovery,
+watchdog, ownership, braking, holding, or ground safety.
+
 The hard release freeze is required because the reviewed MCU parser retains a
-function-static partial 11-byte command across a Linux close/reopen. It has no
-inter-byte timeout or host-generation signal, so a complete startup-zero host
-write after an unclean exit is not proof that the MCU parsed zero. Removing the
-freeze requires a new ADR, read-back identity for the installed firmware, an
+function-static partial 11-byte command across a Linux close/reopen. The future
+write paths now prepare ten `0x00` resynchronization bytes followed by one
+exact-zero candidate before any read or normal command. That proof is still
+conditional on the reviewed candidate source: removing the freeze requires
+accepted ADR 0003, read-back identity for the installed firmware, an
 actuator-power-isolated parser resynchronization and unclean-restart test, and
 the remaining stop/ownership/watchdog evidence below. Receive-only capture
-stays byte-level read-only and sends no startup frame.
+stays byte-level read-only and sends no startup bytes.
+
+[ADR 0003](../adr/0003-wheeltec-power-isolated-parser-recovery.md) now defines
+and software-tests a candidate-specific zero-only recovery prefix: ten `0x00`
+bytes followed by an exact-zero frame.  Exhaustive parser-count tests cover all
+retained counts zero through ten, and a partial or unknown write restarts only
+from the complete zero padding.  The physical-open path also rechecks the direct
+character-device identity after `open` and before exclusivity or termios.  These
+are software and injected-PTY results only: ADR 0003 is accepted, but no
+recovery bytes have been sent to this controller, and installed-firmware
+identity remains a prerequisite.
+
+The currently matching udev rule is pinned and yields `root:dialout` mode
+`0660`, but two nonmatching vendor-era controller rules for other kernel names
+still request `0777`.  They require administrator removal or hardening before
+ownership acceptance.  `flock` coordinates compliant processes and `TIOCEXCL`
+blocks later opens; neither proves that no already-open, noncooperating holder
+exists.  Deployment therefore still needs a dedicated service identity,
+restricted group membership, disabled competing vendor services, and a fresh
+pre-open holder audit.
 
 The formal wrapper runs its serial execution cycle from an independent
 monotonic worker rather than the ROS callback queue. ROS publication uses a
@@ -86,6 +115,11 @@ VCU source timestamp or ACK.
 - [ ] Identify the physical and logical transport, bus settings, addressing,
   session/enable sequence, message direction, protocol revision, and authority
   for the protocol documentation.
+- [ ] Bind the prepared USB VID/PID/serial observation to the successfully
+  opened character device across hotplug and device-number reuse, using an
+  allocation-free post-open sysfs-object check or equivalent reviewed evidence.
+  Before/fd/after devtmpfs inode and major/minor equality alone does not close
+  this item.
 - [ ] Record command and feedback encodings, byte order, scaling, offsets,
   units, signs, ranges, reserved values, checksums or CRCs, rolling counters,
   acknowledgement behavior, and malformed-frame handling.

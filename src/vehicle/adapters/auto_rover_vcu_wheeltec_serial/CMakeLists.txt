@@ -155,6 +155,28 @@ if(CATKIN_ENABLE_TESTING)
     COMMAND auto_rover_wheeltec_physical_activation_tests
   )
 
+  add_executable(auto_rover_wheeltec_ordered_publication_tests
+    ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tests/wheeltec/test_ordered_cycle_publication_mailbox.cpp
+  )
+  target_include_directories(auto_rover_wheeltec_ordered_publication_tests
+    PRIVATE
+      ${CMAKE_CURRENT_SOURCE_DIR}/src
+      ${catkin_INCLUDE_DIRS}
+  )
+  target_compile_features(auto_rover_wheeltec_ordered_publication_tests
+    PUBLIC cxx_std_14
+  )
+  target_compile_options(auto_rover_wheeltec_ordered_publication_tests
+    PRIVATE -Wall -Wextra -Wpedantic -Werror
+  )
+  target_link_libraries(auto_rover_wheeltec_ordered_publication_tests
+    PRIVATE Threads::Threads
+  )
+  add_test(
+    NAME auto_rover_wheeltec_ordered_publication_tests
+    COMMAND auto_rover_wheeltec_ordered_publication_tests
+  )
+
   add_executable(auto_rover_vcu_wheeltec_runtime_tests
     ${CMAKE_CURRENT_SOURCE_DIR}/../../../../tests/wheeltec/test_runtime.cpp
   )

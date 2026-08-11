@@ -40,7 +40,8 @@ auto_rover::ValidationResult validatePurePursuitConfig(
   }
   if (config.localization_freshness_ns <= 0 ||
       config.trajectory_freshness_ns <= 0 ||
-      config.chassis_freshness_ns <= 0 || config.motion_valid_for_ns <= 0) {
+      config.chassis_freshness_ns <= 0 ||
+      config.safety_freshness_ns <= 0 || config.motion_valid_for_ns <= 0) {
     return auto_rover::ValidationResult::failure(
         "control time limits must be positive");
   }
@@ -56,7 +57,7 @@ void PurePursuit::reset() {
   progress_index_ = 0U;
   last_update_monotonic_ns_ = 0;
   last_commanded_speed_mps_ = 0.0;
-  control_enable_observed_ = false;
+  execution_enable_observed_ = false;
 }
 
 auto_rover::MotionReference PurePursuit::makeReference(
@@ -83,7 +84,7 @@ TrackingResult PurePursuit::invalidResult(const TrackingInput& input,
                                           const std::string& reason) {
   last_commanded_speed_mps_ = 0.0;
   last_update_monotonic_ns_ = input.now_monotonic_ns;
-  control_enable_observed_ = false;
+  execution_enable_observed_ = false;
   TrackingResult output;
   output.reference = makeReference(input, 0.0, 0.0, false, false);
   output.reason = reason;
@@ -254,6 +255,91 @@ auto_rover::ValidationResult PurePursuit::observeTrajectoryOrder(
   return auto_rover::ValidationResult::success();
 }
 
+auto_rover::ValidationResult PurePursuit::observeSafetyStateOrder(
+    const auto_rover::SafetyState& safety,
+    std::int64_t receipt_monotonic_ns) {
+  if (!safety_order_.initialized) {
+    safety_order_.initialized = true;
+    safety_order_.state_id = safety.state_id;
+    safety_order_.latch_generation = safety.latch_generation;
+    safety_order_.stamp_ns = safety.stamp_ns;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    safety_order_.mode = safety.mode;
+    safety_order_.reasons = safety.reasons;
+    return auto_rover::ValidationResult::success();
+  }
+  if (safety_order_.compromised) {
+    return auto_rover::ValidationResult::failure(
+        "safety state source is compromised; controller restart is required");
+  }
+  if (receipt_monotonic_ns < safety_order_.receipt_monotonic_ns) {
+    safety_order_.compromised = true;
+    return auto_rover::ValidationResult::failure(
+        "safety state receipt time rolled back");
+  }
+  if (safety.state_id < safety_order_.state_id) {
+    safety_order_.compromised = true;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    return auto_rover::ValidationResult::failure(
+        "safety state identity rolled back");
+  }
+  if (safety.latch_generation < safety_order_.latch_generation) {
+    safety_order_.compromised = true;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    return auto_rover::ValidationResult::failure(
+        "safety latch generation rolled back");
+  }
+  if (safety.stamp_ns < safety_order_.stamp_ns) {
+    safety_order_.compromised = true;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    return auto_rover::ValidationResult::failure(
+        "safety state source stamp rolled back");
+  }
+
+  const bool same_semantic_identity =
+      safety.state_id == safety_order_.state_id &&
+      safety.latch_generation == safety_order_.latch_generation &&
+      safety.stamp_ns == safety_order_.stamp_ns &&
+      safety.mode == safety_order_.mode &&
+      safety.reasons == safety_order_.reasons;
+  if (same_semantic_identity) {
+    if (receipt_monotonic_ns == safety_order_.receipt_monotonic_ns) {
+      return auto_rover::ValidationResult::success();
+    }
+    safety_order_.compromised = true;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    return auto_rover::ValidationResult::failure(
+        "safety semantic sample was replayed with a new receipt");
+  }
+  if (safety.state_id == safety_order_.state_id &&
+      (safety.mode != safety_order_.mode ||
+       safety.reasons != safety_order_.reasons)) {
+    safety_order_.compromised = true;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    return auto_rover::ValidationResult::failure(
+        "safety state identity was reused for a different mode or reason");
+  }
+  if (safety.stamp_ns == safety_order_.stamp_ns) {
+    safety_order_.compromised = true;
+    safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+    return auto_rover::ValidationResult::failure(
+        "safety state source stamp did not advance");
+  }
+  if (receipt_monotonic_ns == safety_order_.receipt_monotonic_ns) {
+    safety_order_.compromised = true;
+    return auto_rover::ValidationResult::failure(
+        "safety semantic state changed without a new receipt");
+  }
+
+  safety_order_.state_id = safety.state_id;
+  safety_order_.latch_generation = safety.latch_generation;
+  safety_order_.stamp_ns = safety.stamp_ns;
+  safety_order_.receipt_monotonic_ns = receipt_monotonic_ns;
+  safety_order_.mode = safety.mode;
+  safety_order_.reasons = safety.reasons;
+  return auto_rover::ValidationResult::success();
+}
+
 TrackingResult PurePursuit::update(const TrackingInput& input) {
   const auto_rover::ValidationResult config_result =
       validatePurePursuitConfig(config_);
@@ -283,10 +369,20 @@ TrackingResult PurePursuit::update(const TrackingInput& input) {
                            config_.chassis_freshness_ns)) {
     return invalidResult(input, "chassis state is stale");
   }
+  if (!auto_rover::isFresh(input.safety.receipt_monotonic_ns,
+                           input.now_monotonic_ns,
+                           config_.safety_freshness_ns)) {
+    return invalidResult(input, "safety state is stale");
+  }
   if (!auto_rover::withinDeclaredValidity(input.trajectory.value.stamp_ns,
                                           input.now_ros_ns,
                                           input.trajectory.value.valid_for_ns)) {
     return invalidResult(input, "trajectory declared validity expired");
+  }
+  if (!auto_rover::withinDeclaredValidity(input.safety.value.stamp_ns,
+                                          input.now_ros_ns,
+                                          input.safety.value.valid_for_ns)) {
+    return invalidResult(input, "safety state declared validity expired");
   }
   const auto_rover::ValidationResult ego_result = auto_rover::validateEgoState(
       input.ego.value, config_.world_frame, config_.control_frame);
@@ -304,11 +400,21 @@ TrackingResult PurePursuit::update(const TrackingInput& input) {
   if (!chassis_result.ok) {
     return invalidResult(input, chassis_result.reason);
   }
+  const auto_rover::ValidationResult safety_result =
+      auto_rover::validateSafetyState(input.safety.value);
+  if (!safety_result.ok) {
+    return invalidResult(input, safety_result.reason);
+  }
 
   auto_rover::ValidationResult order_result = observeRequiredStateOrder(
       "ego", input.ego.value.source_id, input.ego.value.state_id,
       input.ego.value.stamp_ns, input.ego.receipt_monotonic_ns,
       &ego_order_);
+  if (!order_result.ok) {
+    return invalidResult(input, order_result.reason);
+  }
+  order_result = observeSafetyStateOrder(
+      input.safety.value, input.safety.receipt_monotonic_ns);
   if (!order_result.ok) {
     return invalidResult(input, order_result.reason);
   }
@@ -331,30 +437,62 @@ TrackingResult PurePursuit::update(const TrackingInput& input) {
     progress_index_ = 0U;
     last_update_monotonic_ns_ = 0;
     last_commanded_speed_mps_ = 0.0;
+    execution_enable_observed_ = false;
   }
 
   const bool control_enable_substantiated =
       (input.chassis.value.valid_mask &
        auto_rover::ChassisState::kControlEnabledValid) != 0U;
-  if (!control_enable_substantiated) {
-    return invalidResult(input, "chassis control-enable state is unavailable");
-  }
-  if (!input.chassis.value.control_enabled) {
+  // Capability history is scoped to one normalized chassis producer.  It is
+  // learned only from the validity bit and never from software authorization
+  // or a provider-specific inhibit that is not the normalized capability.
+  if (active_chassis_source_id_ != input.chassis.value.source_id) {
+    active_chassis_source_id_ = input.chassis.value.source_id;
+    control_enable_capability_observed_ = false;
+    execution_enable_observed_ = false;
     last_commanded_speed_mps_ = 0.0;
     last_update_monotonic_ns_ = input.now_monotonic_ns;
-    control_enable_observed_ = false;
+  }
+  if (control_enable_substantiated &&
+      !control_enable_capability_observed_) {
+    control_enable_capability_observed_ = true;
+    execution_enable_observed_ = false;
+    last_commanded_speed_mps_ = 0.0;
+    last_update_monotonic_ns_ = input.now_monotonic_ns;
+  } else if (!control_enable_substantiated &&
+             control_enable_capability_observed_) {
+    return invalidResult(
+        input, "chassis control-enable capability disappeared");
+  }
+
+  if (input.safety.value.mode != auto_rover::SafetyMode::kArmed) {
+    last_commanded_speed_mps_ = 0.0;
+    last_update_monotonic_ns_ = input.now_monotonic_ns;
+    execution_enable_observed_ = false;
+    TrackingResult output;
+    output.reference = makeReference(input, 0.0, 0.0, false, true);
+    output.reason = "software safety is not armed; holding zero";
+    return output;
+  }
+  if (control_enable_substantiated &&
+      !input.chassis.value.control_enabled) {
+    last_commanded_speed_mps_ = 0.0;
+    last_update_monotonic_ns_ = input.now_monotonic_ns;
+    execution_enable_observed_ = false;
     TrackingResult output;
     output.reference = makeReference(input, 0.0, 0.0, false, true);
     output.reason = "vehicle control is disabled; holding zero";
     return output;
   }
-  if (!control_enable_observed_) {
+  if (!execution_enable_observed_) {
     last_commanded_speed_mps_ = 0.0;
     last_update_monotonic_ns_ = input.now_monotonic_ns;
-    control_enable_observed_ = true;
+    execution_enable_observed_ = true;
     TrackingResult output;
     output.reference = makeReference(input, 0.0, 0.0, false, true);
-    output.reason = "vehicle control enabled; establishing zero ramp origin";
+    output.reason = control_enable_substantiated
+                        ? "vehicle and software control enabled; establishing zero ramp origin"
+                        : "software safety armed with VCU enable unavailable; establishing zero ramp origin";
     return output;
   }
 

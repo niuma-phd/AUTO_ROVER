@@ -140,11 +140,18 @@ using SysfsTextReader =
 using SysfsPathResolver =
     std::function<bool(const std::string&, std::string*)>;
 
-// Preparation hooks exist so identity pinning can be tested without a physical
-// USB device.  They are called only during preparation, before raw ::open.
+using PhysicalPathIdentityReader =
+    bool (*)(const char*, PhysicalFileIdentity*, void*);
+
+// Hooks exist so identity pinning can be tested without a physical USB device.
+// Sysfs hooks run only during preparation.  The optional path-identity reader
+// is invoked for both the pre-open and post-open observations; production
+// callers leave it null and use component-wise lstat without symlinks.
 struct PhysicalPreparationOperations {
   SysfsPathResolver resolve_sysfs_device_path;
   SysfsTextReader read_sysfs_text;
+  PhysicalPathIdentityReader read_path_identity{nullptr};
+  void* path_identity_context{nullptr};
 };
 
 struct PhysicalOpenResult {

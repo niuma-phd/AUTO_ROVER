@@ -973,6 +973,50 @@ wheeltec::PhysicalDeviceOptions optionsForPty(
   return options;
 }
 
+wheeltec::PhysicalFileIdentity fileIdentityFromStatForTest(
+    const struct stat& metadata) {
+  wheeltec::PhysicalFileIdentity identity;
+  identity.is_symlink = S_ISLNK(metadata.st_mode);
+  identity.is_character_device = S_ISCHR(metadata.st_mode);
+  identity.filesystem_device =
+      static_cast<std::uint64_t>(metadata.st_dev);
+  identity.inode = static_cast<std::uint64_t>(metadata.st_ino);
+  identity.device_major =
+      static_cast<std::uint64_t>(::major(metadata.st_rdev));
+  identity.device_minor =
+      static_cast<std::uint64_t>(::minor(metadata.st_rdev));
+  identity.owner_uid = static_cast<std::uint64_t>(metadata.st_uid);
+  identity.group_gid = static_cast<std::uint64_t>(metadata.st_gid);
+  identity.permission_bits =
+      static_cast<std::uint32_t>(metadata.st_mode & 07777);
+  return identity;
+}
+
+struct SequencedPathIdentityRead {
+  const char* expected_path{nullptr};
+  wheeltec::PhysicalFileIdentity before_open;
+  wheeltec::PhysicalFileIdentity after_open;
+  int calls{0};
+};
+
+bool readSequencedPathIdentity(
+    const char* path, wheeltec::PhysicalFileIdentity* identity,
+    void* opaque) noexcept {
+  SequencedPathIdentityRead* const sequence =
+      static_cast<SequencedPathIdentityRead*>(opaque);
+  if (path == nullptr || identity == nullptr || sequence == nullptr ||
+      sequence->expected_path == nullptr ||
+      std::strcmp(path, sequence->expected_path) != 0 ||
+      sequence->calls < 0 || sequence->calls > 1) {
+    errno = EINVAL;
+    return false;
+  }
+  *identity = sequence->calls == 0 ? sequence->before_open
+                                   : sequence->after_open;
+  ++sequence->calls;
+  return true;
+}
+
 void testPreparedPhysicalOpenIsAllocationFreeAndOwnsLock() {
   PtyPair pair;
   expect(openPtyPair(&pair), "PTY pair opens for prepared-open test");
@@ -1068,6 +1112,65 @@ void testPreparedPhysicalOpenIsAllocationFreeAndOwnsLock() {
   expect(repeated.status == wheeltec::TransportStatus::kInvalidArgument &&
              repeated.os_error == EALREADY && !repeated.transport,
          "a prepared physical open is one-shot even after success");
+}
+
+void testPreparedPhysicalOpenRejectsPostOpenPathIdentityChange() {
+  PtyPair pair;
+  expect(openPtyPair(&pair),
+         "PTY pair opens for post-open identity-race test");
+  if (pair.slave < 0 || pair.slave_path.empty()) {
+    return;
+  }
+  struct stat metadata {};
+  if (::fstat(pair.slave, &metadata) != 0) {
+    expect(false,
+           "PTY metadata is available for post-open identity-race test");
+    return;
+  }
+
+  const wheeltec::PhysicalDeviceOptions options =
+      optionsForPty(pair, metadata);
+  const std::string usb_parent = "/sys/devices/pci0000:00/usb1/1-1";
+  const std::map<std::string, std::string> attributes{
+      {usb_parent + "/idVendor", "1a86\n"},
+      {usb_parent + "/idProduct", "7523\n"},
+      {usb_parent + "/serial", "ROVER-VCU-001\n"}};
+  wheeltec::PhysicalPreparationOperations operations =
+      injectedUsbPreparation(attributes);
+  SequencedPathIdentityRead sequence;
+  sequence.expected_path = pair.slave_path.c_str();
+  sequence.before_open = fileIdentityFromStatForTest(metadata);
+  sequence.after_open = sequence.before_open;
+  ++sequence.after_open.inode;
+  operations.read_path_identity = &readSequencedPathIdentity;
+  operations.path_identity_context = &sequence;
+
+  wheeltec::PreparedPhysicalSerialOpen prepared(options, operations);
+  expect(prepared.prepared() && sequence.calls == 1,
+         "preparation records the first path identity observation");
+  const std::size_t descriptors_before_open = countOpenDescriptors();
+  const std::size_t allocations_before_open = g_cpp_allocation_count;
+  const wheeltec::PhysicalOpenResult result = prepared.open();
+  const std::size_t allocations_after_open = g_cpp_allocation_count;
+  const std::size_t descriptors_after_open = countOpenDescriptors();
+  expect(sequence.calls == 2,
+         "production open re-reads the no-symlink path identity after fstat");
+  expect(result.status == wheeltec::TransportStatus::kInvalidArgument &&
+             result.os_error == EPERM && !result.transport,
+         "a post-open path identity change rejects the production open");
+  expect(descriptors_after_open == descriptors_before_open,
+         "post-open identity rejection closes the guarded descriptor");
+  expect(allocations_after_open == allocations_before_open,
+         "post-open identity validation performs no C++ allocation");
+
+  const int probe_fd =
+      ::open(pair.slave_path.c_str(),
+             O_RDONLY | O_NOCTTY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW);
+  expect(probe_fd >= 0,
+         "post-open identity rejection occurs before TIOCEXCL");
+  if (probe_fd >= 0) {
+    ::close(probe_fd);
+  }
 }
 
 void testActuationReleaseFreezePrecedesEveryOpenStep() {
@@ -1484,6 +1587,7 @@ int main() {
   testUsbIdentityAncestorLookup();
   testHardenedPhysicalOpenWithPtyOnly();
   testPreparedPhysicalOpenIsAllocationFreeAndOwnsLock();
+  testPreparedPhysicalOpenRejectsPostOpenPathIdentityChange();
   testActuationReleaseFreezePrecedesEveryOpenStep();
   testAdapterRecoveryAndWatchdog();
   testAdapterSubmissionRejections();

@@ -3,8 +3,8 @@
   <name>auto_rover_ros1_conversions</name>
   <version>0.1.0</version>
   <description>Explicit ROS 1 and core-domain conversions for AUTO_ROVER.</description>
-  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
-  <license>All rights reserved; public license decision pending</license>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>auto_rover_core</build_depend>
@@ -22,5 +22,6 @@
   <exec_depend>geometry_msgs</exec_depend>
   <exec_depend>roscpp</exec_depend>
   <exec_depend>std_msgs</exec_depend>
+  <test_depend>gtest</test_depend>
   <export />
 </package>

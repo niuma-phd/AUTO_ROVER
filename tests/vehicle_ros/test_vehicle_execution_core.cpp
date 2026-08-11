@@ -87,7 +87,7 @@ auto_rover::EgoState ego() {
   value.time_source = auto_rover::TimeSource::kPublishTime;
   value.reference_frame = "rear_axle_center";
   value.pose.orientation.w = 1.0;
-  value.source_id = "synthetic_fast_livo";
+  value.source_id = "synthetic_localization_provider";
   value.valid = true;
   return value;
 }
@@ -578,7 +578,7 @@ void testRequiredInputSourceOrderingFailsClosed() {
     expect(!same_source.ok &&
                contains(same_source.reason, "new identity is required"),
            "same ego producer identity cannot silently recover after rollback");
-    value.source_id = "synthetic_fast_livo_generation_2";
+    value.source_id = "synthetic_localization_provider_generation_2";
     value.state_id = 1U;
     value.stamp_ns = 2000000000LL;
     expect(runtime.updateEgoState(value, 1050000000LL).ok,

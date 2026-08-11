@@ -266,6 +266,36 @@ with a latch generation, producer ROS timestamp, declared lifetime, validity,
 and explicit reason codes. Its ROS timestamp is diagnostic; the guard records a
 monotonic receipt time.
 
+Pure Pursuit also consumes `SafetyState` as the software execution-authorization
+feedback from vehicle execution. It requires independent monotonic receiver
+freshness, declared producer validity, and non-rollback ordering. Missing,
+stale, invalid, replayed, or rolled-back safety state produces an invalid zero
+reference. Once every required controller input is valid and fresh, any
+non-`ARMED` safety mode produces a valid zero hold and resets the speed ramp;
+the first later `ARMED` update establishes another zero ramp origin.
+
+This software state does not substantiate VCU enable. If an active
+`ChassisState.source_id` has never supplied `CONTROL_ENABLED_VALID`, an `ARMED`
+software state may permit the controller to form a reference while the vehicle
+execution core and backend retain final authority. If that chassis source does
+supply the bit, `control_enabled=true` remains necessary for nonzero tracking,
+false produces a zero hold, and later disappearance of the bit fails closed.
+Neither `SafetyState`, host authorization, nor `FlagStop=0` may be copied into
+the normalized VCU feedback field.
+
+One execution process publishes a single non-rollback `SafetyState` stream even
+when its backend cycle runs on a worker thread.  A synchronous arm, disarm,
+emergency-stop, or reset transition orders before any pending worker result:
+the wrapper removes the pre-transition result and reserves the new state/latch
+generation before publishing it.  Delayed results below that high-water mark
+are not published.  The direct and cycle paths serialize the actual safety ROS
+publish separately from the real-time worker, and a cycle already taken from
+the mailbox must reclaim immediately before publish.  Invalid identities or
+timestamps and mode/reason changes under a reused identity are suppressed.
+Thus an old `ARMED` cycle cannot appear after a latched emergency stop, and an
+earlier disarmed or latched generation cannot replay after arm or authorized
+reset.
+
 An `EmergencyStop` assertion has a non-empty request and source identity and a
 source timestamp. Every valid assertion received by the execution process
 latches immediately and increments the latch generation even when the vehicle
@@ -321,15 +351,18 @@ configured consecutive-fresh recovery run.
 Disabled Wheeltec initialization is a valid inhibited state and performs no
 device open or transport I/O. The current revision compiles its physical
 actuation release gate off, before any open; no parameter may override it. The
-prepared future activation path makes an exact-zero host write its first serial
-I/O, forbids feedback reads before that completes, drains opening backlog, and
-requires fresh post-drain control-allowed receipts before arm. This host-side
-sequence is not yet a physical release guarantee: the reviewed MCU parser can
-retain a partial command across host reconnect, so removing the compile-time
-freeze requires installed-firmware identity and actuator-power-isolated parser
-resynchronization evidence through a new ADR. A terminal disconnect never
-silently reopens or resumes the prior session; a future remount would use a new
-connection generation and still require recovery plus a new arm.
+prepared future activation path makes zero-only parser resynchronization its
+first serial I/O: ten `0x00` padding bytes are followed by an exact-zero command
+frame.  It forbids feedback reads before that sequence completes, drains
+opening backlog, and requires fresh post-drain control-allowed receipts before
+arm. This host-side sequence is not yet a physical release guarantee: the
+reviewed candidate MCU parser can retain a partial command across host reconnect
+and the installed firmware has not been identified.  Removing the compile-time
+freeze therefore still requires installed-firmware identity and
+actuator-power-isolated parser-resynchronization evidence under ADR 0003. A
+terminal disconnect never silently reopens or resumes the prior session; a
+future remount would use a new connection generation and still require the full
+zero-only recovery plus a new arm.
 
 Backend delivery distinguishes a complete local transport delivery from a VCU
 acknowledgement. For the current Wheeltec protocol, a complete 11-byte host

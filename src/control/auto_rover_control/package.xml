@@ -3,8 +3,8 @@
   <name>auto_rover_control</name>
   <version>0.1.0</version>
   <description>ROS-independent Pure Pursuit tracking with a thin ROS 1 edge.</description>
-  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
-  <license>All rights reserved; public license decision pending</license>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>auto_rover_core</depend>

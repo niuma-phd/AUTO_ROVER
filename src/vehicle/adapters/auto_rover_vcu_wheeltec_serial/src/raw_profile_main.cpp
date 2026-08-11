@@ -1,3 +1,4 @@
+#include "auto_rover_vcu_wheeltec_serial/physical_activation.hpp"
 #include "auto_rover_vcu_wheeltec_serial/raw_profile.hpp"
 #include "auto_rover_vcu_wheeltec_serial/transport.hpp"
 
@@ -416,22 +417,33 @@ std::string openResultRecord(const wheeltec::PhysicalOpenResult& result,
   return stream.str();
 }
 
-std::string startupZeroRecord(
-    const wheeltec::RawProfileImmediateZeroResult& result,
+std::string startupActivationRecord(
+    const wheeltec::PhysicalActivationResult& result,
     wheeltec::RawProfile profile) {
   std::ostringstream stream;
   stream << "{\"schema\":\"" << kSchema
          << "\",\"record_type\":\"startup_exact_zero_result\""
          << ",\"profile_id\":\"" << wheeltec::rawProfileName(profile)
          << "\",\"attempts\":" << result.attempts
+         << ",\"startup_sequence\":\"ten_zero_padding_then_exact_zero\""
+         << ",\"parser_resync_padding_bytes\":"
+         << wheeltec::kCommandParserResyncPaddingSize
+         << ",\"parser_resync_padding_host_write_completed\":"
+         << (result.parser_resync_padding_host_write_complete ? "true"
+                                                              : "false")
          << ",\"exact_zero_frame\":true"
          << ",\"zero_host_write_completed\":"
-         << (result.zero_host_write_completed ? "true" : "false")
+         << (result.exact_zero_host_write_complete ? "true" : "false")
+         << ",\"recovery_restarts\":" << result.recovery_restarts
+         << ",\"activation_status\":\""
+         << wheeltec::physicalActivationStatusName(result.status) << "\""
+         << ",\"write_stream_poisoned\":"
+         << (result.write_stream_poisoned ? "true" : "false")
          << ",\"vcu_acknowledgement\":false"
          << ",\"delivery_unconfirmed\":"
          << (result.delivery_unconfirmed ? "true" : "false")
          << ",\"terminal_transport_status\":\""
-         << transportStatusText(result.terminal_transport_status)
+         << transportStatusText(result.last_io.status)
          << "\",\"recording_order\":\"all_zero_attempts_completed_before_this_record\"}";
   return stream.str();
 }
@@ -551,19 +563,33 @@ int main(int argc, char** argv) {
     return evidence.appendLine(line);
   };
   operations.stop_requested = []() { return g_stop_requested != 0; };
-  const wheeltec::RawProfileEncodeResult preencoded_zero =
-      wheeltec::encodeRawProfileCommand(command_line.profile, 0);
-  if (!preencoded_zero.ok()) {
+
+  // Prepare the zero-only parser recovery before acquiring the command
+  // channel.  The codec limit makes the generic exact-zero encoder complete;
+  // this guard cannot encode raw-profile motion and does not widen Phase-1.
+  wheeltec::PhysicalActivationConfig activation_config;
+  activation_config.codec_limits.max_forward_speed_mps = 0.50;
+  wheeltec::PhysicalActivationOperations activation_operations;
+  activation_operations.monotonic_now_ns = operations.monotonic_now_ns;
+  activation_operations.wait_until_monotonic_ns =
+      operations.wait_until_monotonic_ns;
+  wheeltec::PreparedPhysicalActivation activation(
+      activation_config, activation_operations);
+  if (!activation.prepared()) {
     sink.finish();
+    std::fprintf(stderr,
+                 "wheeltec_raw_profile_capture: cannot prepare physical zero-only activation guard\n");
     return 3;
   }
+  wheeltec::PreparedPhysicalSerialOpen prepared_open(physical);
 
-  wheeltec::PhysicalOpenResult opened = wheeltec::openPhysicalSerial(physical);
-  wheeltec::RawProfileImmediateZeroResult startup_zero;
+  wheeltec::PhysicalOpenResult opened = prepared_open.open();
+  wheeltec::PhysicalActivationResult startup_activation;
   if (opened.status == wheeltec::TransportStatus::kOk &&
       opened.transport) {
-    startup_zero = wheeltec::writeRawProfileImmediateZeroNoRecord(
-        opened.transport.get(), preencoded_zero.frame, operations);
+    // No read, record construction, or evidence callback may separate the
+    // successful physical open from this zero-only recovery transaction.
+    startup_activation = activation.activate(opened.transport.get());
   }
   const std::string open_result_record =
       openResultRecord(opened, command_line.profile);
@@ -585,16 +611,20 @@ int main(int argc, char** argv) {
     return evidence_ok && output_ok ? 4 : 3;
   }
   if (!evidence.appendLine(
-          startupZeroRecord(startup_zero, command_line.profile))) {
+          startupActivationRecord(startup_activation,
+                                  command_line.profile))) {
     opened.transport.reset();
     sink.finish();
     return 3;
   }
-  if (!startup_zero.zero_host_write_completed) {
+  if (!startup_activation.succeeded()) {
     opened.transport.reset();
     wheeltec::RawProfileResult failed;
-    failed.status = startup_zero.terminal_transport_status ==
-                            wheeltec::TransportStatus::kDisconnected
+    failed.status = startup_activation.last_io.status ==
+                                wheeltec::TransportStatus::kDisconnected ||
+                            startup_activation.status ==
+                                wheeltec::PhysicalActivationStatus::
+                                    kTransportUnavailable
                         ? wheeltec::RawProfileStatus::kDisconnected
                         : wheeltec::RawProfileStatus::kWriteFailed;
     failed.delivery_unconfirmed = true;
@@ -605,7 +635,11 @@ int main(int argc, char** argv) {
         sink.writeLine(wheeltec::rawProfileSummaryRecordJson(failed));
     const bool output_ok = sink.finish();
     std::fprintf(stderr,
-                 "wheeltec_raw_profile_capture: startup exact-zero host write failed; no read or profile command was attempted\n");
+                 "wheeltec_raw_profile_capture: startup zero-only parser recovery failed (%s, poisoned=%s); no read or profile command was attempted\n",
+                 wheeltec::physicalActivationStatusName(
+                     startup_activation.status),
+                 startup_activation.write_stream_poisoned ? "true"
+                                                           : "false");
     return evidence_ok && summary_ok && output_ok ? 5 : 3;
   }
   wheeltec::WheeltecRawProfileSession session;

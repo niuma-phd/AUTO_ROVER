@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <limits>
 #include <stdexcept>
 
 namespace wheeltec = auto_rover::wheeltec_serial;
@@ -22,7 +23,7 @@ void expect(bool condition, const char* message) {
 
 struct WriteOutcome {
   wheeltec::TransportStatus status{wheeltec::TransportStatus::kOk};
-  std::size_t transferred{wheeltec::kCommandFrameSize};
+  std::size_t transferred{std::numeric_limits<std::size_t>::max()};
   bool delivery_unconfirmed{false};
   std::int64_t elapsed_ns{1};
   bool throws{false};
@@ -48,6 +49,7 @@ class ScriptedActivationTransport final : public wheeltec::ByteTransport {
         frames[index][byte] = data[byte];
       }
       deadlines[index] = deadline_ns;
+      sizes[index] = size;
     }
     const WriteOutcome outcome =
         index < outcomes.size() ? outcomes[index] : WriteOutcome{};
@@ -60,7 +62,11 @@ class ScriptedActivationTransport final : public wheeltec::ByteTransport {
     if (outcome.status == wheeltec::TransportStatus::kDisconnected) {
       connected = false;
     }
-    return {outcome.status, outcome.transferred, 0,
+    const std::size_t transferred =
+        outcome.transferred == std::numeric_limits<std::size_t>::max()
+            ? size
+            : outcome.transferred;
+    return {outcome.status, transferred, 0,
             outcome.delivery_unconfirmed};
   }
 
@@ -72,9 +78,10 @@ class ScriptedActivationTransport final : public wheeltec::ByteTransport {
 
   std::int64_t* clock_{nullptr};
   bool connected{true};
-  std::array<WriteOutcome, 3U> outcomes{};
-  std::array<wheeltec::CommandFrame, 3U> frames{};
-  std::array<std::int64_t, 3U> deadlines{};
+  std::array<WriteOutcome, 8U> outcomes{};
+  std::array<wheeltec::CommandFrame, 8U> frames{};
+  std::array<std::size_t, 8U> sizes{};
+  std::array<std::int64_t, 8U> deadlines{};
   std::size_t write_calls{0U};
   std::size_t read_calls{0U};
 };
@@ -115,7 +122,53 @@ bool isExactZero(const wheeltec::CommandFrame& frame) {
   return true;
 }
 
-void testSuccessfulActivationIsOneExactZeroAndNoRead() {
+bool isParserResyncPadding(const ScriptedActivationTransport& transport,
+                           std::size_t write_index) {
+  if (write_index >= transport.frames.size() ||
+      transport.sizes[write_index] !=
+          wheeltec::kCommandParserResyncPaddingSize) {
+    return false;
+  }
+  for (std::size_t index = 0U;
+       index < wheeltec::kCommandParserResyncPaddingSize; ++index) {
+    if (transport.frames[write_index][index] != 0U) {
+      return false;
+    }
+  }
+  return true;
+}
+
+void testPaddingResynchronizesEveryCandidateParserCount() {
+  const auto padding = wheeltec::commandParserResyncPadding();
+  expect(padding.size() == wheeltec::kCommandFrameSize - 1U,
+         "parser resync padding covers every nonzero retained count");
+  for (const std::uint8_t byte : padding) {
+    expect(byte == 0U,
+           "parser resync padding contains no candidate frame header");
+  }
+
+  for (std::size_t initial_count = 0U;
+       initial_count < wheeltec::kCommandFrameSize; ++initial_count) {
+    std::size_t count = initial_count;
+    for (const std::uint8_t byte : padding) {
+      if (count == 0U && byte != wheeltec::kFrameHeader) {
+        continue;
+      }
+      ++count;
+      if (count == wheeltec::kCommandFrameSize) {
+        // The completion byte is 0x00, so it cannot satisfy the required
+        // 0x7d tail and the reviewed candidate parser resets its count.
+        expect(byte != wheeltec::kFrameTail,
+               "padding cannot complete a valid retained command frame");
+        count = 0U;
+      }
+    }
+    expect(count == 0U,
+           "ten zero bytes leave every candidate parser count at zero");
+  }
+}
+
+void testSuccessfulActivationIsPaddingThenExactZeroAndNoRead() {
   std::int64_t clock = 100;
   ScriptedActivationTransport transport(&clock);
   const wheeltec::PreparedPhysicalActivation activation(config(),
@@ -123,15 +176,19 @@ void testSuccessfulActivationIsOneExactZeroAndNoRead() {
   expect(activation.prepared(), "valid activation is prepared before open");
   const wheeltec::PhysicalActivationResult result =
       activation.activate(&transport);
-  expect(result.succeeded() && result.exact_zero_host_write_complete &&
+  expect(result.succeeded() &&
+             result.parser_resync_padding_host_write_complete &&
+             result.exact_zero_host_write_complete &&
              !result.delivery_unconfirmed &&
              !result.write_stream_poisoned && result.attempts == 1U &&
-             transport.write_calls == 1U && transport.read_calls == 0U &&
-             isExactZero(transport.frames[0U]),
-         "activation's first and only protocol I/O is a complete exact zero");
+             transport.write_calls == 2U && transport.read_calls == 0U &&
+             isParserResyncPadding(transport, 0U) &&
+             transport.sizes[1U] == wheeltec::kCommandFrameSize &&
+             isExactZero(transport.frames[1U]),
+         "activation starts with zero-only parser padding and then writes one exact zero command");
 }
 
-void testKnownZeroByteFailureRetriesOnlyExactZero() {
+void testKnownZeroBytePaddingFailureRestartsWholeSequence() {
   std::int64_t clock = 100;
   ScriptedActivationTransport transport(&clock);
   transport.outcomes[0U] = {wheeltec::TransportStatus::kDeadlineExceeded,
@@ -141,14 +198,15 @@ void testKnownZeroByteFailureRetriesOnlyExactZero() {
   const wheeltec::PhysicalActivationResult result =
       activation.activate(&transport);
   expect(result.succeeded() && result.attempts == 2U &&
-             transport.write_calls == 2U && transport.read_calls == 0U &&
-             isExactZero(transport.frames[0U]) &&
-             isExactZero(transport.frames[1U]) &&
+             transport.write_calls == 3U && transport.read_calls == 0U &&
+             isParserResyncPadding(transport, 0U) &&
+             isParserResyncPadding(transport, 1U) &&
+             isExactZero(transport.frames[2U]) &&
              transport.deadlines[1U] > transport.deadlines[0U],
-         "a proven zero-byte failure gets one bounded retry and every attempt is exact zero");
+         "a zero-byte padding failure gets a bounded full-sequence retry");
 }
 
-void testPartialAndThrowPoisonWithoutRetry() {
+void testPartialOrUnknownProgressRestartsFromSafePadding() {
   {
     std::int64_t clock = 100;
     ScriptedActivationTransport transport(&clock);
@@ -158,12 +216,14 @@ void testPartialAndThrowPoisonWithoutRetry() {
         config(), operations(&clock));
     const wheeltec::PhysicalActivationResult result =
         activation.activate(&transport);
-    expect(result.status ==
-                   wheeltec::PhysicalActivationStatus::kWriteStreamPoisoned &&
-               result.delivery_unconfirmed &&
-               result.write_stream_poisoned &&
-               transport.write_calls == 1U && transport.read_calls == 0U,
-           "a partial activation write poisons the generation and is never followed by another frame");
+    expect(result.succeeded() && !result.delivery_unconfirmed &&
+               !result.write_stream_poisoned && result.attempts == 2U &&
+               result.recovery_restarts == 1U &&
+               transport.write_calls == 3U && transport.read_calls == 0U &&
+               isParserResyncPadding(transport, 0U) &&
+               isParserResyncPadding(transport, 1U) &&
+               isExactZero(transport.frames[2U]),
+           "partial zero padding is recoverable only by restarting with the full padding sequence");
   }
   {
     std::int64_t clock = 100;
@@ -173,12 +233,174 @@ void testPartialAndThrowPoisonWithoutRetry() {
         config(), operations(&clock));
     const wheeltec::PhysicalActivationResult result =
         activation.activate(&transport);
+    expect(result.succeeded() && !result.delivery_unconfirmed &&
+               !result.write_stream_poisoned && result.attempts == 2U &&
+               result.recovery_restarts == 1U &&
+               transport.write_calls == 3U && transport.read_calls == 0U &&
+               isParserResyncPadding(transport, 0U) &&
+               isParserResyncPadding(transport, 1U) &&
+               isExactZero(transport.frames[2U]),
+           "unknown padding progress is recovered without ever appending a nonzero candidate");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[1U] = {wheeltec::TransportStatus::kDeadlineExceeded,
+                              5U, true, 1, false};
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.succeeded() && result.attempts == 2U &&
+               result.recovery_restarts == 1U &&
+               transport.write_calls == 4U &&
+               isParserResyncPadding(transport, 0U) &&
+               isExactZero(transport.frames[1U]) &&
+               isParserResyncPadding(transport, 2U) &&
+               isExactZero(transport.frames[3U]),
+           "a partial exact-zero prefix is invalidated by a new full padding sequence before retry");
+  }
+}
+
+void testEveryPartialExactZeroPrefixRestartsWholeSequence() {
+  for (std::size_t prefix_size = 1U;
+       prefix_size < wheeltec::kCommandFrameSize; ++prefix_size) {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[1U] = {
+        wheeltec::TransportStatus::kDeadlineExceeded, prefix_size, true, 1,
+        false};
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.succeeded() && result.attempts == 2U &&
+               result.recovery_restarts == 1U &&
+               transport.write_calls == 4U &&
+               isParserResyncPadding(transport, 0U) &&
+               isExactZero(transport.frames[1U]) &&
+               isParserResyncPadding(transport, 2U) &&
+               isExactZero(transport.frames[3U]),
+           "every partial exact-zero prefix is invalidated by a full zero-only padding restart");
+  }
+}
+
+void testDisconnectClockAndWaitFailuresFailClosed() {
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.connected = false;
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
     expect(result.status ==
-                   wheeltec::PhysicalActivationStatus::kWriteStreamPoisoned &&
-               result.delivery_unconfirmed &&
+                   wheeltec::PhysicalActivationStatus::kTransportUnavailable &&
+               result.attempts == 0U && result.delivery_unconfirmed &&
+               transport.write_calls == 0U,
+           "a disconnected transport is rejected before the first padding write");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[0U] = {
+        wheeltec::TransportStatus::kDisconnected, 4U, true, 1, false};
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.status ==
+                   wheeltec::PhysicalActivationStatus::kTransportUnavailable &&
+               result.attempts == 1U && result.delivery_unconfirmed &&
                result.write_stream_poisoned &&
-               transport.write_calls == 1U && transport.read_calls == 0U,
-           "an exception with unknown write progress poisons without retry");
+               transport.write_calls == 1U,
+           "a partial padding disconnect fails terminally and records an unresolved stream");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[1U] = {
+        wheeltec::TransportStatus::kDisconnected, 5U, true, 1, false};
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.status ==
+                   wheeltec::PhysicalActivationStatus::kTransportUnavailable &&
+               result.attempts == 1U && result.delivery_unconfirmed &&
+               result.write_stream_poisoned &&
+               transport.write_calls == 2U,
+           "a partial exact-zero disconnect never retries on the disconnected generation");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[0U].elapsed_ns = -1;
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.status ==
+                   wheeltec::PhysicalActivationStatus::kClockInvalid &&
+               result.parser_resync_padding_host_write_complete &&
+               result.delivery_unconfirmed &&
+               transport.write_calls == 1U,
+           "a clock rollback after padding fails closed before exact zero");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[1U].elapsed_ns = -1;
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), operations(&clock));
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.status ==
+                   wheeltec::PhysicalActivationStatus::kClockInvalid &&
+               result.exact_zero_host_write_complete &&
+               result.delivery_unconfirmed &&
+               transport.write_calls == 2U,
+           "a clock rollback after exact zero cannot establish activation");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[0U] = {
+        wheeltec::TransportStatus::kDeadlineExceeded, 0U, false, 1, false};
+    wheeltec::PhysicalActivationOperations failing_wait = operations(&clock);
+    failing_wait.wait_until_monotonic_ns =
+        [](std::int64_t) { return false; };
+    const wheeltec::PreparedPhysicalActivation activation(config(),
+                                                            failing_wait);
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.status ==
+                   wheeltec::PhysicalActivationStatus::kRetryWaitFailed &&
+               result.delivery_unconfirmed &&
+               transport.write_calls == 1U,
+           "a failed retry wait prevents any later write");
+  }
+  {
+    std::int64_t clock = 100;
+    ScriptedActivationTransport transport(&clock);
+    transport.outcomes[0U] = {
+        wheeltec::TransportStatus::kDeadlineExceeded, 0U, false, 1, false};
+    wheeltec::PhysicalActivationOperations rollback_after_wait =
+        operations(&clock);
+    rollback_after_wait.wait_until_monotonic_ns =
+        [&clock](std::int64_t deadline_ns) {
+          clock = deadline_ns - 1;
+          return true;
+        };
+    const wheeltec::PreparedPhysicalActivation activation(
+        config(), rollback_after_wait);
+    const wheeltec::PhysicalActivationResult result =
+        activation.activate(&transport);
+    expect(result.status ==
+                   wheeltec::PhysicalActivationStatus::kClockInvalid &&
+               result.delivery_unconfirmed &&
+               transport.write_calls == 1U,
+           "a retry clock that does not reach its deadline fails closed");
   }
 }
 
@@ -198,12 +420,13 @@ void testRetryExhaustionAndLateFullZeroFailClosed() {
                result.delivery_unconfirmed &&
                !result.write_stream_poisoned &&
                transport.write_calls == 1U && transport.read_calls == 0U,
-           "a confirmed zero-byte attempt completing after its deadline is never retried");
+           "a confirmed zero-byte padding attempt completing after its deadline is never retried");
   }
   {
     std::int64_t clock = 100;
     ScriptedActivationTransport transport(&clock);
-    for (WriteOutcome& outcome : transport.outcomes) {
+    for (std::size_t index = 0U; index < 3U; ++index) {
+      WriteOutcome& outcome = transport.outcomes[index];
       outcome = {wheeltec::TransportStatus::kDeadlineExceeded, 0U, false, 1,
                  false};
     }
@@ -216,12 +439,12 @@ void testRetryExhaustionAndLateFullZeroFailClosed() {
                !result.write_stream_poisoned &&
                result.delivery_unconfirmed && result.attempts == 3U &&
                transport.write_calls == 3U && transport.read_calls == 0U,
-           "known zero-byte failures stop after the configured bounded attempts");
+           "known zero-byte padding failures stop after the configured bounded sequence attempts");
   }
   {
     std::int64_t clock = 100;
     ScriptedActivationTransport transport(&clock);
-    transport.outcomes[0U].elapsed_ns = 11;
+    transport.outcomes[1U].elapsed_ns = 11;
     const wheeltec::PreparedPhysicalActivation activation(
         config(), operations(&clock));
     const wheeltec::PhysicalActivationResult result =
@@ -231,8 +454,8 @@ void testRetryExhaustionAndLateFullZeroFailClosed() {
                result.exact_zero_host_write_complete &&
                result.delivery_unconfirmed &&
                !result.write_stream_poisoned &&
-               transport.write_calls == 1U && transport.read_calls == 0U,
-           "a complete but late activation zero is known zero yet cannot activate the session");
+               transport.write_calls == 2U && transport.read_calls == 0U,
+           "a complete but late exact-zero after padding is known zero yet cannot activate the session");
   }
 }
 
@@ -255,9 +478,12 @@ void testInvalidPreparationNeverTouchesTransport() {
 }  // namespace
 
 int main() {
-  testSuccessfulActivationIsOneExactZeroAndNoRead();
-  testKnownZeroByteFailureRetriesOnlyExactZero();
-  testPartialAndThrowPoisonWithoutRetry();
+  testPaddingResynchronizesEveryCandidateParserCount();
+  testSuccessfulActivationIsPaddingThenExactZeroAndNoRead();
+  testKnownZeroBytePaddingFailureRestartsWholeSequence();
+  testPartialOrUnknownProgressRestartsFromSafePadding();
+  testEveryPartialExactZeroPrefixRestartsWholeSequence();
+  testDisconnectClockAndWaitFailuresFailClosed();
   testRetryExhaustionAndLateFullZeroFailClosed();
   testInvalidPreparationNeverTouchesTransport();
   if (failures != 0) {

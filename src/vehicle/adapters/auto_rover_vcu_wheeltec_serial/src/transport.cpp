@@ -264,6 +264,22 @@ bool readPathIdentityWithoutSymlinks(
   return false;
 }
 
+bool readPhysicalPathIdentity(
+    const std::array<char, PATH_MAX>& path,
+    PhysicalPathIdentityReader injected_reader,
+    void* injected_context,
+    PhysicalFileIdentity* identity) noexcept {
+  if (injected_reader == nullptr) {
+    return readPathIdentityWithoutSymlinks(path, identity);
+  }
+  try {
+    return injected_reader(path.data(), identity, injected_context);
+  } catch (...) {
+    errno = EIO;
+    return false;
+  }
+}
+
 class ScopedFd final {
  public:
   explicit ScopedFd(int fd) noexcept : fd_(fd) {}
@@ -861,7 +877,10 @@ void PosixFdTransport::markDisconnected() noexcept {
 
 struct PreparedPhysicalSerialOpen::Implementation {
   std::array<char, PATH_MAX> device_path{};
+  PhysicalDeviceOptions pinned_options;
   PhysicalFileIdentity before_open{};
+  PhysicalPathIdentityReader read_path_identity{nullptr};
+  void* path_identity_context{nullptr};
   std::unique_ptr<PosixFdTransport> transport;
   int requested_access{O_RDONLY};
   bool consumed{false};
@@ -911,7 +930,13 @@ void PreparedPhysicalSerialOpen::prepare(
       return;
     }
     PhysicalFileIdentity before_open;
-    if (!readPathIdentityWithoutSymlinks(copied_path, &before_open)) {
+    const PhysicalPathIdentityReader path_identity_reader =
+        operations == nullptr ? nullptr : operations->read_path_identity;
+    void* const path_identity_context =
+        operations == nullptr ? nullptr : operations->path_identity_context;
+    errno = 0;
+    if (!readPhysicalPathIdentity(copied_path, path_identity_reader,
+                                  path_identity_context, &before_open)) {
       const int path_error = errno == 0 ? EIO : errno;
       preparation_status_ =
           path_error == ELOOP || path_error == ENOTDIR ||
@@ -983,7 +1008,10 @@ void PreparedPhysicalSerialOpen::prepare(
       return;
     }
     prepared->device_path = copied_path;
+    prepared->pinned_options = options;
     prepared->before_open = before_open;
+    prepared->read_path_identity = path_identity_reader;
+    prepared->path_identity_context = path_identity_context;
     prepared->requested_access =
         options.access_mode == PhysicalAccessMode::kFeedbackOnly ? O_RDONLY
                                                                  : O_RDWR;
@@ -1056,16 +1084,32 @@ PhysicalOpenResult PreparedPhysicalSerialOpen::open() noexcept {
   }
   const PhysicalFileIdentity observed_fd =
       identityFromStat(opened_metadata);
-  if (!sameFileIdentity(implementation_->before_open, observed_fd)) {
-    result.status = TransportStatus::kInvalidArgument;
-    result.os_error = EPERM;
+
+  errno = 0;
+  const bool is_tty = ::isatty(opened_fd.get()) == 1;
+  const int tty_error = errno;
+
+  PhysicalFileIdentity after_open;
+  errno = 0;
+  if (!readPhysicalPathIdentity(
+          implementation_->device_path,
+          implementation_->read_path_identity,
+          implementation_->path_identity_context, &after_open)) {
+    const int path_error = errno == 0 ? EIO : errno;
+    result.status =
+        path_error == ELOOP || path_error == ENOTDIR ||
+                path_error == EINVAL
+            ? TransportStatus::kInvalidArgument
+            : statusForOpenError(path_error);
+    result.os_error = path_error;
     return result;
   }
 
-  errno = 0;
-  if (::isatty(opened_fd.get()) != 1) {
+  if (!validatePhysicalDeviceFileIdentity(
+          implementation_->pinned_options,
+          implementation_->before_open, observed_fd, after_open, is_tty)) {
     result.status = TransportStatus::kInvalidArgument;
-    result.os_error = errno == 0 ? ENOTTY : errno;
+    result.os_error = is_tty ? EPERM : (tty_error == 0 ? ENOTTY : tty_error);
     return result;
   }
 

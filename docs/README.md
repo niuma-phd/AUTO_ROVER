@@ -30,6 +30,15 @@ override it.
   proposes the isolated raised-wheel profiles, explicit 6.0 m/s experimental
   catalog ceiling, startup/final-zero semantics, and bounded evidence-buffer
   tradeoff. It does not change the production 0.50 m/s ceiling.
+- [ADR 0003: Wheeltec power-isolated parser recovery and release sequencing](adr/0003-wheeltec-power-isolated-parser-recovery.md)
+  proposes the zero-only parser-resynchronization sequence and keeps physical
+  release blocked pending installed-firmware identity and physical evidence.
+- [ADR 0004: Pure Pursuit software-safety authorization feedback](adr/0004-pure-pursuit-safety-authorization-feedback.md)
+  closes the formal-backend graph deadlock without fabricating unavailable VCU
+  enable feedback or weakening final vehicle-execution authority.
+- [ADR 0005: Apache-2.0 license and reusable-module publication](adr/0005-apache-2.0-license-and-reusable-module-publication.md)
+  accepts Apache-2.0 for AUTO_ROVER-originated work and governs bounded public
+  exports of reusable packages without vendor, deployment, or evidence material.
 
 ## Evidence and contract registers
 
@@ -83,6 +92,10 @@ override it.
   preserves the retracted E-stop-button attestation and later main-breaker
   clarification without extending the conditional raised-bench authorization
   to ground operation or release.
+- [Wheeltec USB-powered, traction-isolated passive follow-up](evidence/2026-08-11-wheeltec-power-isolated-passive-follow-up.md)
+  records the later receive-only 30-second observation with the vehicle and
+  LiDAR reported off, including 612 inhibited feedback frames and the remaining
+  installed-firmware/parser/ownership limits.  It transmitted no bytes.
 - [NUC Ackermann known-map runbook](applications/nuc_ackermann_known_map_runbook.md)
   describes the split default-safe ROS graph and fake-only operator workflow.
 - [NUC Ackermann commissioning handoff](vehicles/nuc_ackermann_commissioning.md)

@@ -3,8 +3,8 @@
   <name>auto_rover_vehicle</name>
   <version>0.1.0</version>
   <description>Fail-closed vehicle execution with a deterministic fake VCU ROS 1 boundary.</description>
-  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
-  <license>All rights reserved; public license decision pending</license>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>auto_rover_core</build_depend>

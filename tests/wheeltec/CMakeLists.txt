@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.0.2)
 project(auto_rover_wheeltec_sanitizer_tests LANGUAGES CXX)
 
 enable_testing()
+find_package(Threads REQUIRED)
 
 get_filename_component(AUTO_ROVER_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
 set(WHEELTEC_PACKAGE
@@ -56,6 +57,30 @@ target_link_libraries(auto_rover_wheeltec_physical_activation_tests PRIVATE
 
 add_test(NAME wheeltec_physical_activation_injected
   COMMAND auto_rover_wheeltec_physical_activation_tests
+)
+
+add_executable(auto_rover_wheeltec_ordered_publication_tests
+  test_ordered_cycle_publication_mailbox.cpp
+)
+target_include_directories(auto_rover_wheeltec_ordered_publication_tests
+  PRIVATE
+    "${AUTO_ROVER_ROOT}/src/core/auto_rover_core/include"
+    "${AUTO_ROVER_ROOT}/src/safety/auto_rover_safety/include"
+    "${AUTO_ROVER_ROOT}/src/vehicle/auto_rover_vehicle/include"
+    "${WHEELTEC_PACKAGE}/src"
+)
+target_compile_features(auto_rover_wheeltec_ordered_publication_tests
+  PUBLIC cxx_std_14
+)
+target_compile_options(auto_rover_wheeltec_ordered_publication_tests PRIVATE
+  -Wall -Wextra -Wpedantic -Werror
+)
+target_link_libraries(auto_rover_wheeltec_ordered_publication_tests PRIVATE
+  Threads::Threads
+)
+
+add_test(NAME wheeltec_ordered_safety_publication_interleavings
+  COMMAND auto_rover_wheeltec_ordered_publication_tests
 )
 
 add_executable(auto_rover_wheeltec_runtime_tests test_runtime.cpp)

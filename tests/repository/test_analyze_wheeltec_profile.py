@@ -223,8 +223,14 @@ def raw_cli_prefix(profile_id="left_01"):
             "record_type": "startup_exact_zero_result",
             "profile_id": profile_id,
             "attempts": 1,
+            "startup_sequence": "ten_zero_padding_then_exact_zero",
+            "parser_resync_padding_bytes": 10,
+            "parser_resync_padding_host_write_completed": True,
             "exact_zero_frame": True,
             "zero_host_write_completed": True,
+            "recovery_restarts": 0,
+            "activation_status": "success",
+            "write_stream_poisoned": False,
             "vcu_acknowledgement": False,
             "delivery_unconfirmed": False,
             "terminal_transport_status": "ok",
@@ -721,7 +727,7 @@ class WheeltecProfileAnalyzerTests(unittest.TestCase):
                 with self.assertRaisesRegex(self.tool.AnalysisError, message):
                     self.tool.analyze_path(path)
 
-    def test_raw_physical_cli_prefix_proves_startup_zero_before_session(self):
+    def test_raw_physical_cli_prefix_proves_recovery_before_session(self):
         records = raw_physical_records()
         temporary, path = self.write_records(records)
         self.addCleanup(temporary.cleanup)
@@ -901,12 +907,41 @@ class WheeltecProfileAnalyzerTests(unittest.TestCase):
         wrong_record_order[2]["recording_order"] = "before_zero_attempts"
         cases.append((wrong_record_order, "recording order is unsupported"))
 
+        wrong_padding_length = complete_records()
+        wrong_padding_length[2]["parser_resync_padding_bytes"] = 9
+        cases.append((wrong_padding_length, "exactly 10 zero padding bytes"))
+
+        incomplete_padding = complete_records()
+        incomplete_padding[2][
+            "parser_resync_padding_host_write_completed"
+        ] = False
+        cases.append((incomplete_padding, "padding host write must be complete"))
+
+        poisoned_recovery = complete_records()
+        poisoned_recovery[2]["write_stream_poisoned"] = True
+        cases.append((poisoned_recovery, "startup recovery may not be poisoned"))
+
         for index, (records, message) in enumerate(cases):
             with self.subTest(case=index):
                 temporary, path = self.write_records(records)
                 self.addCleanup(temporary.cleanup)
                 with self.assertRaisesRegex(self.tool.AnalysisError, message):
                     self.tool.analyze_path(path)
+
+    def test_raw_legacy_exact_zero_prefix_remains_historical_input(self):
+        records = raw_physical_records()
+        for key in (
+            "startup_sequence",
+            "parser_resync_padding_bytes",
+            "parser_resync_padding_host_write_completed",
+            "recovery_restarts",
+            "activation_status",
+            "write_stream_poisoned",
+        ):
+            del records[2][key]
+        temporary, path = self.write_records(records)
+        self.addCleanup(temporary.cleanup)
+        self.tool.analyze_path(path)
 
     def test_raw_stop_candidate_starts_at_first_zero_after_final_nonzero(self):
         records = [raw_metadata(), raw_tx(100, "baseline", 0, 0)]

@@ -15,7 +15,7 @@ TEST(Ros1Conversions, EgoRoundTripPreservesExplicitTimeMeaning) {
   input.reference_frame = "rear_axle_center";
   input.pose.position = {1.0, -2.0, 0.5};
   input.pose.orientation.w = 1.0;
-  input.source_id = "fast_livo2_ros1_main_3df0201";
+  input.source_id = "localization_provider_generation_1";
   input.valid = true;
 
   const auto message = auto_rover_ros1::toRos(input);

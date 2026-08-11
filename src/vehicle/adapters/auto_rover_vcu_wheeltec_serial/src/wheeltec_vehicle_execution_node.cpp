@@ -30,8 +30,12 @@
 #include "auto_rover_vcu_wheeltec_serial/transport.hpp"
 #include "auto_rover_vcu_wheeltec_serial/vehicle_backend.hpp"
 #include "auto_rover_vehicle/vehicle_execution_core.hpp"
+#include "ordered_cycle_publication_mailbox.hpp"
 
 namespace {
+
+namespace ordered_publication =
+    auto_rover::wheeltec_serial::node_internal;
 
 constexpr double kMaximumCyclePeriodS = 0.05;
 constexpr double kLimitTolerance = 1e-12;
@@ -885,30 +889,6 @@ class WheeltecVehicleExecutionNode {
     }
   }
 
-  enum class MailboxStoreResult : std::uint8_t {
-    kStored = 0,
-    kContended,
-    kLate,
-  };
-
-  MailboxStoreResult tryStoreCycleResult(
-      auto_rover_vehicle::VehicleExecutionCycleResult result,
-      const std::chrono::steady_clock::time_point latest_completion) {
-    std::unique_lock<std::mutex> lock(publication_mutex_, std::try_to_lock);
-    if (!lock.owns_lock()) {
-      return MailboxStoreResult::kContended;
-    }
-    pending_cycle_result_ = std::move(result);
-    cycle_result_pending_ = true;
-    if (std::chrono::steady_clock::now() >= latest_completion) {
-      // Do not publish a result that may still describe the pre-stop armed
-      // cycle after the physical worker has declared a timing failure.
-      cycle_result_pending_ = false;
-      return MailboxStoreResult::kLate;
-    }
-    return MailboxStoreResult::kStored;
-  }
-
   void workerLoop() noexcept {
     try {
       using Clock = std::chrono::steady_clock;
@@ -958,16 +938,23 @@ class WheeltecVehicleExecutionNode {
             // The ROS publication thread must never be able to block the
             // physical watchdog worker.  Failure to acquire or populate the
             // one-slot mailbox is terminal while the core lock is still held.
-            const MailboxStoreResult mailbox_result = tryStoreCycleResult(
-                std::move(result), next_deadline + worker_period_);
-            if (mailbox_result == MailboxStoreResult::kContended) {
+            const ordered_publication::OrderedCycleStoreResult mailbox_result =
+                publication_mailbox_.tryStoreCycleResult(
+                    std::move(result), next_deadline + worker_period_);
+            if (mailbox_result ==
+                ordered_publication::OrderedCycleStoreResult::kContended) {
               terminalWorkerStopLocked(WorkerTerminalReason::kMailboxFailure);
               return;
             }
-            if (mailbox_result == MailboxStoreResult::kLate) {
+            if (mailbox_result ==
+                ordered_publication::OrderedCycleStoreResult::kLate) {
               terminalWorkerStopLocked(WorkerTerminalReason::kCycleOverrun);
               return;
             }
+            // A stale result can only have been computed before a synchronous
+            // arm/disarm/E-stop/reset transition reserved a newer safety
+            // generation.  Dropping it is the ordered, fail-closed outcome;
+            // it is not a worker timing failure.
           } catch (...) {
             terminalWorkerStopLocked(WorkerTerminalReason::kMailboxFailure);
             return;
@@ -982,16 +969,7 @@ class WheeltecVehicleExecutionNode {
 
   void publicationCallback(const ros::WallTimerEvent&) {
     auto_rover_vehicle::VehicleExecutionCycleResult result;
-    bool available = false;
-    {
-      std::lock_guard<std::mutex> lock(publication_mutex_);
-      if (cycle_result_pending_) {
-        result = std::move(pending_cycle_result_);
-        cycle_result_pending_ = false;
-        available = true;
-      }
-    }
-    if (available) {
+    if (publication_mailbox_.takeCycleResult(&result)) {
       publishCycleResult(result);
     }
     reportWorkerTerminalIfNeeded();
@@ -1089,6 +1067,7 @@ class WheeltecVehicleExecutionNode {
       }
       const auto assertion = auto_rover_ros1::toCore(*message);
       auto_rover_vehicle::VehicleExecutionServiceResult result;
+      bool publish_safety = false;
       {
         std::lock_guard<std::mutex> lock(core_mutex_);
         if (!rosCallbackMayEnter()) {
@@ -1096,8 +1075,16 @@ class WheeltecVehicleExecutionNode {
         }
         result = runtime_->handleEmergencyStop(assertion, monotonicNow(),
                                                rosNow());
+        // Reserve the transition while the execution core is still locked.
+        // Any cycle result already in the mailbox predates this E-stop, and
+        // the worker cannot compute/store another result until this ordering
+        // barrier is complete.
+        publish_safety =
+            publication_mailbox_.prepareDirectSafetyPublication(result.state);
       }
-      safety_publisher_.publish(auto_rover_ros1::toRos(result.state));
+      if (publish_safety) {
+        publishPreparedDirectSafetyState(result.state);
+      }
       if (result.stop_delivery.delivery_unconfirmed) {
         ROS_ERROR_STREAM(
             "Emergency-stop latch "
@@ -1120,7 +1107,15 @@ class WheeltecVehicleExecutionNode {
     if (result.chassis_available) {
       chassis_publisher_.publish(auto_rover_ros1::toRos(result.chassis));
     }
-    safety_publisher_.publish(auto_rover_ros1::toRos(result.safety));
+    {
+      // The worker never takes this mutex.  It serializes only actual ROS
+      // SafetyState publications and the final high-water claim, closing the
+      // interval between takeCycleResult() and this publish.
+      std::lock_guard<std::mutex> lock(safety_publication_mutex_);
+      if (publication_mailbox_.claimCycleSafetyPublication(result.safety)) {
+        safety_publisher_.publish(auto_rover_ros1::toRos(result.safety));
+      }
+    }
     if (!result.health_clear) {
       ROS_WARN_STREAM_THROTTLE(
           1.0, "Wheeltec vehicle execution inhibited: "
@@ -1151,6 +1146,7 @@ class WheeltecVehicleExecutionNode {
         return false;
       }
       auto_rover_vehicle::VehicleExecutionServiceResult result;
+      bool publish_safety = false;
       {
         std::lock_guard<std::mutex> lock(core_mutex_);
         if (!rosCallbackMayEnter()) {
@@ -1161,11 +1157,15 @@ class WheeltecVehicleExecutionNode {
         result = runtime_->requestArm(
             request.operator_id, request.safety_generation, request.arm,
             monotonicNow(), rosNow());
+        publish_safety =
+            publication_mailbox_.prepareDirectSafetyPublication(result.state);
       }
       response.success = result.success;
       response.reason = result.reason;
       response.safety_mode = static_cast<std::uint8_t>(result.state.mode);
-      safety_publisher_.publish(auto_rover_ros1::toRos(result.state));
+      if (publish_safety) {
+        publishPreparedDirectSafetyState(result.state);
+      }
       if (result.stop_delivery.delivery_unconfirmed) {
         ROS_ERROR_STREAM("Arm/disarm request completed with unconfirmed "
                          "Wheeltec physical zero delivery: "
@@ -1200,6 +1200,7 @@ class WheeltecVehicleExecutionNode {
         assertion.asserted = true;
       }
       auto_rover_vehicle::VehicleExecutionServiceResult result;
+      bool publish_safety = false;
       {
         std::lock_guard<std::mutex> lock(core_mutex_);
         if (!rosCallbackMayEnter()) {
@@ -1209,12 +1210,16 @@ class WheeltecVehicleExecutionNode {
         }
         result = runtime_->handleEmergencyStop(assertion, monotonicNow(),
                                                rosNow());
+        publish_safety =
+            publication_mailbox_.prepareDirectSafetyPublication(result.state);
       }
       response.success = result.success;
       response.reason = result.reason;
       response.safety_mode = static_cast<std::uint8_t>(result.state.mode);
       response.latch_generation = result.state.latch_generation;
-      safety_publisher_.publish(auto_rover_ros1::toRos(result.state));
+      if (publish_safety) {
+        publishPreparedDirectSafetyState(result.state);
+      }
       if (result.stop_delivery.delivery_unconfirmed) {
         ROS_ERROR_STREAM(
             "Emergency-stop latch "
@@ -1243,6 +1248,7 @@ class WheeltecVehicleExecutionNode {
         return false;
       }
       auto_rover_vehicle::VehicleExecutionServiceResult result;
+      bool publish_safety = false;
       {
         std::lock_guard<std::mutex> lock(core_mutex_);
         if (!rosCallbackMayEnter()) {
@@ -1253,12 +1259,16 @@ class WheeltecVehicleExecutionNode {
         result = runtime_->resetEmergencyStop(
             request.operator_id, request.latch_generation,
             request.conditions_cleared_acknowledged, monotonicNow(), rosNow());
+        publish_safety =
+            publication_mailbox_.prepareDirectSafetyPublication(result.state);
       }
       response.success = result.success;
       response.reason = result.reason;
       response.safety_mode = static_cast<std::uint8_t>(result.state.mode);
       response.current_latch_generation = result.state.latch_generation;
-      safety_publisher_.publish(auto_rover_ros1::toRos(result.state));
+      if (publish_safety) {
+        publishPreparedDirectSafetyState(result.state);
+      }
       if (result.stop_delivery.delivery_unconfirmed) {
         ROS_ERROR_STREAM("Emergency-stop reset completed with unconfirmed "
                          "Wheeltec physical zero delivery: "
@@ -1268,6 +1278,18 @@ class WheeltecVehicleExecutionNode {
     } catch (...) {
       terminalWorkerStop(WorkerTerminalReason::kRosCallbackException);
       return false;
+    }
+  }
+
+  void publishPreparedDirectSafetyState(
+      const auto_rover::SafetyState& safety) {
+    // Direct callbacks release core_mutex_ before entering this possibly
+    // blocking ROS publication section.  The physical worker therefore never
+    // waits behind a ROS publish while holding its watchdog-critical core
+    // boundary.
+    std::lock_guard<std::mutex> lock(safety_publication_mutex_);
+    if (publication_mailbox_.claimPreparedDirectSafetyPublication(safety)) {
+      safety_publisher_.publish(auto_rover_ros1::toRos(safety));
     }
   }
 
@@ -1288,7 +1310,8 @@ class WheeltecVehicleExecutionNode {
   bool activated_{false};
   std::mutex core_mutex_;
   std::mutex worker_wait_mutex_;
-  std::mutex publication_mutex_;
+  std::mutex safety_publication_mutex_;
+  ordered_publication::OrderedCyclePublicationMailbox publication_mailbox_;
   std::condition_variable worker_wakeup_;
   std::atomic<bool> stop_worker_{false};
   std::atomic<bool> accepting_ros_callbacks_{false};
@@ -1297,8 +1320,6 @@ class WheeltecVehicleExecutionNode {
   std::atomic<bool> worker_terminal_delivery_unconfirmed_{true};
   std::atomic<bool> worker_terminal_reported_{false};
   std::thread worker_;
-  auto_rover_vehicle::VehicleExecutionCycleResult pending_cycle_result_;
-  bool cycle_result_pending_{false};
   ros::Subscriber ego_subscriber_;
   ros::Subscriber trajectory_subscriber_;
   ros::Subscriber motion_subscriber_;
@@ -1353,7 +1374,8 @@ int main(int argc, char** argv) {
     if (config.real_device_enabled) {
       // String/sysfs identity work and transport storage allocation are
       // completed before raw ::open.  open() is the noexcept, one-shot
-      // syscall-only boundary consumed immediately by the exact-zero guard.
+      // syscall-only boundary consumed immediately by the zero-only parser
+      // resynchronization and exact-zero guard.
       auto_rover::wheeltec_serial::PreparedPhysicalSerialOpen prepared_open(
           config.physical);
       auto opened = prepared_open.open();
@@ -1366,13 +1388,13 @@ int main(int argc, char** argv) {
         return EXIT_FAILURE;
       }
       // No logging, metadata, read, allocation, or ROS construction is placed
-      // between successful open and this prepared no-record exact-zero guard.
+      // between successful open and this prepared no-record zero-only guard.
       if (!wrapper.activatePhysical(std::move(opened.transport),
                                     preopen_monotonic_ns,
                                     preopen_ros_ns)) {
         const auto& activation = wrapper.activationResult();
         ROS_FATAL_STREAM(
-            "Wheeltec physical activation failed after bounded exact-zero: "
+            "Wheeltec physical activation failed after bounded zero-only parser recovery: "
             << auto_rover::wheeltec_serial::physicalActivationStatusName(
                    activation.status)
             << " write_stream_poisoned="

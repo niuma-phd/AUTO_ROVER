@@ -3,8 +3,8 @@
   <name>auto_rover_interfaces</name>
   <version>0.1.0</version>
   <description>Versioned ROS 1 Noetic interfaces for AUTO_ROVER phase 1.</description>
-  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
-  <license>All rights reserved; public license decision pending</license>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <build_depend>geometry_msgs</build_depend>

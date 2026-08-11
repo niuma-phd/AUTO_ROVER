@@ -16,6 +16,9 @@ NODE = (
 CMAKE = NODE.parents[1] / "CMakeLists.txt"
 PACKAGE = NODE.parents[1] / "package.xml"
 BENCH = NODE.parent / "bench_main.cpp"
+RAW_PROFILE = NODE.parent / "raw_profile_main.cpp"
+FEEDBACK_CAPTURE = NODE.parent / "feedback_capture_main.cpp"
+ORDERED_MAILBOX = NODE.parent / "ordered_cycle_publication_mailbox.hpp"
 
 
 class WheeltecVehicleExecutionNodeContractTest(unittest.TestCase):
@@ -25,6 +28,9 @@ class WheeltecVehicleExecutionNodeContractTest(unittest.TestCase):
         cls.cmake = CMAKE.read_text(encoding="utf-8")
         cls.package = PACKAGE.read_text(encoding="utf-8")
         cls.bench = BENCH.read_text(encoding="utf-8")
+        cls.raw_profile = RAW_PROFILE.read_text(encoding="utf-8")
+        cls.feedback_capture = FEEDBACK_CAPTURE.read_text(encoding="utf-8")
+        cls.ordered_mailbox = ORDERED_MAILBOX.read_text(encoding="utf-8")
 
     def test_graph_has_no_guard_bypass_or_fake_services(self):
         for topic in ("ego_state", "trajectory", "motion_reference"):
@@ -98,7 +104,7 @@ class WheeltecVehicleExecutionNodeContractTest(unittest.TestCase):
             self.text,
         )
 
-    def test_post_open_boundary_is_prepared_zero_then_runtime_startup(self):
+    def test_post_open_boundary_is_zero_only_recovery_then_runtime(self):
         constructor = self.text[
             self.text.index("WheeltecVehicleExecutionNode(") :
             self.text.index("~WheeltecVehicleExecutionNode() noexcept")
@@ -143,7 +149,7 @@ class WheeltecVehicleExecutionNodeContractTest(unittest.TestCase):
         self.assertNotIn("prepared_open.open()", disabled)
         self.assertNotIn("physical_activation_->activate", disabled)
 
-    def test_installed_bench_uses_same_no_record_first_zero_guard(self):
+    def test_installed_bench_uses_same_no_record_zero_only_guard(self):
         prepare = self.bench.index("PreparedPhysicalActivation activation")
         prepare_open = self.bench.index(
             "PreparedPhysicalSerialOpen prepared_open", prepare
@@ -160,6 +166,74 @@ class WheeltecVehicleExecutionNodeContractTest(unittest.TestCase):
         self.assertLess(
             self.bench.index("kPhysicalActuationReleaseEnabled"),
             open_index,
+        )
+
+    def test_every_physical_open_caller_has_audited_access_semantics(self):
+        callers = {
+            path.relative_to(ROOT).as_posix()
+            for path in ROOT.glob("src/**/*.cpp")
+            if re.search(
+                r"\b(?:PreparedPhysicalSerialOpen|openPhysicalSerial)\b",
+                path.read_text(encoding="utf-8"),
+            )
+        }
+        self.assertEqual(
+            callers,
+            {
+                (
+                    "src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/"
+                    "src/bench_main.cpp"
+                ),
+                (
+                    "src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/"
+                    "src/feedback_capture_main.cpp"
+                ),
+                (
+                    "src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/"
+                    "src/raw_profile_main.cpp"
+                ),
+                (
+                    "src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/"
+                    "src/transport.cpp"
+                ),
+                (
+                    "src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/"
+                    "src/wheeltec_vehicle_execution_node.cpp"
+                ),
+            },
+        )
+        self.assertIn(
+            "PhysicalAccessMode::kFeedbackOnly", self.feedback_capture
+        )
+        self.assertNotIn(
+            "PhysicalAccessMode::kActuation", self.feedback_capture
+        )
+
+    def test_raw_profile_uses_parser_recovery_before_any_session_io(self):
+        self.assertIn(
+            '"auto_rover_vcu_wheeltec_serial/physical_activation.hpp"',
+            self.raw_profile,
+        )
+        prepare = self.raw_profile.index(
+            "PreparedPhysicalActivation activation"
+        )
+        prepare_open = self.raw_profile.index(
+            "PreparedPhysicalSerialOpen prepared_open", prepare
+        )
+        open_index = self.raw_profile.index(
+            "prepared_open.open()", prepare_open
+        )
+        activate = self.raw_profile.index("activation.activate", open_index)
+        record = self.raw_profile.index("openResultRecord(opened", activate)
+        session = self.raw_profile.index("session.run", activate)
+        self.assertLess(prepare, prepare_open)
+        self.assertLess(prepare_open, open_index)
+        self.assertLess(open_index, activate)
+        self.assertLess(activate, record)
+        self.assertLess(activate, session)
+        self.assertNotIn("openPhysicalSerial(physical)", self.raw_profile)
+        self.assertNotIn(
+            "writeRawProfileImmediateZeroNoRecord", self.raw_profile
         )
 
     def test_all_independent_actuation_gates_are_loaded(self):
@@ -249,26 +323,120 @@ class WheeltecVehicleExecutionNodeContractTest(unittest.TestCase):
             self.text.index("void workerLoop() noexcept") :
             self.text.index("void publicationCallback")
         ]
-        helper = self.text[
-            self.text.index("MailboxStoreResult tryStoreCycleResult") :
-            self.text.index("void workerLoop() noexcept")
+        self.assertIn("std::try_to_lock", self.ordered_mailbox)
+        self.assertIn("lock.owns_lock()", self.ordered_mailbox)
+        self.assertIn("cycle_result_pending_ = false", self.ordered_mailbox)
+        self.assertIn("OrderedCycleStoreResult::kLate", self.ordered_mailbox)
+        self.assertIn(
+            "OrderedCycleStoreResult::kStaleDropped",
+            self.ordered_mailbox,
+        )
+        worker_mailbox = self.ordered_mailbox[
+            self.ordered_mailbox.index("tryStoreCycleResult") :
+            self.ordered_mailbox.index(
+                "bool prepareDirectSafetyPublication"
+            )
         ]
-        self.assertIn("std::try_to_lock", helper)
-        self.assertIn("lock.owns_lock()", helper)
-        self.assertIn("cycle_result_pending_ = false", helper)
-        self.assertIn("MailboxStoreResult::kLate", helper)
+        self.assertIn("pending_cycle_result_.safety", worker_mailbox)
+        self.assertNotIn("highWaterOf(", worker_mailbox)
         core_lock = worker_body.index(
             "std::lock_guard<std::mutex> lock(core_mutex_)"
         )
-        mailbox = worker_body.index("tryStoreCycleResult", core_lock)
+        mailbox = worker_body.index(
+            "publication_mailbox_.tryStoreCycleResult", core_lock
+        )
         late_stop = worker_body.index(
-            "mailbox_result == MailboxStoreResult::kLate", mailbox
+            "OrderedCycleStoreResult::kLate", mailbox
         )
         self.assertLess(core_lock, mailbox)
         self.assertLess(mailbox, late_stop)
         self.assertIn(
             "terminalWorkerStopLocked(WorkerTerminalReason::kMailboxFailure)",
             worker_body,
+        )
+
+    def test_direct_safety_transitions_order_before_ros_publication(self):
+        self.assertEqual(
+            self.text.count(
+                "publication_mailbox_.prepareDirectSafetyPublication"
+            ),
+            4,
+        )
+        callback_names = (
+            "void emergencyStopCallback",
+            "bool armCallback",
+            "bool assertEmergencyStopCallback",
+            "bool resetCallback",
+        )
+        for index, callback_name in enumerate(callback_names):
+            begin = self.text.index(callback_name)
+            end = (
+                self.text.index(callback_names[index + 1], begin)
+                if index + 1 < len(callback_names)
+                else self.text.index("ros::NodeHandle node_", begin)
+            )
+            callback = self.text[begin:end]
+            core_lock = callback.index(
+                "std::lock_guard<std::mutex> lock(core_mutex_)"
+            )
+            barrier = callback.index(
+                "publication_mailbox_.prepareDirectSafetyPublication",
+                core_lock,
+            )
+            core_unlock = callback.index("}", barrier)
+            publish = callback.index(
+                "publishPreparedDirectSafetyState", barrier
+            )
+            self.assertLess(core_lock, barrier)
+            self.assertLess(barrier, core_unlock)
+            self.assertLess(core_unlock, publish)
+
+        direct_publisher = self.text[
+            self.text.index("void publishPreparedDirectSafetyState") :
+            self.text.index("ros::NodeHandle node_")
+        ]
+        direct_mutex = direct_publisher.index(
+            "std::lock_guard<std::mutex> lock(safety_publication_mutex_)"
+        )
+        direct_claim = direct_publisher.index(
+            "claimPreparedDirectSafetyPublication", direct_mutex
+        )
+        direct_publish = direct_publisher.index(
+            "safety_publisher_.publish", direct_claim
+        )
+        self.assertLess(direct_mutex, direct_claim)
+        self.assertLess(direct_claim, direct_publish)
+
+        cycle_publisher = self.text[
+            self.text.index("void publishCycleResult") :
+            self.text.index("bool armCallback")
+        ]
+        cycle_mutex = cycle_publisher.index(
+            "std::lock_guard<std::mutex> lock(safety_publication_mutex_)"
+        )
+        cycle_claim = cycle_publisher.index(
+            "claimCycleSafetyPublication", cycle_mutex
+        )
+        cycle_publish = cycle_publisher.index(
+            "safety_publisher_.publish", cycle_claim
+        )
+        self.assertLess(cycle_mutex, cycle_claim)
+        self.assertLess(cycle_claim, cycle_publish)
+
+        worker_body = self.text[
+            self.text.index("void workerLoop() noexcept") :
+            self.text.index("void publicationCallback")
+        ]
+        self.assertNotIn("safety_publication_mutex_", worker_body)
+        self.assertIn(
+            "claimPreparedDirectSafetyPublication", self.ordered_mailbox
+        )
+        self.assertIn("claimCycleSafetyPublication", self.ordered_mailbox)
+        self.assertEqual(self.text.count("safety_publisher_.publish"), 2)
+
+        cmake = CMAKE.read_text(encoding="utf-8")
+        self.assertIn(
+            "auto_rover_wheeltec_ordered_publication_tests", cmake
         )
 
     def test_ros_inputs_are_bounded_before_conversion_or_core_lock(self):

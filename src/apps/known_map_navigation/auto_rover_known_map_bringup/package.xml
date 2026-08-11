@@ -3,8 +3,8 @@
   <name>auto_rover_known_map_bringup</name>
   <version>0.1.0</version>
   <description>Default-safe known-map navigation composition for the NUC Ackermann vehicle.</description>
-  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
-  <license>All rights reserved; public license decision pending</license>
+  <maintainer email="289723736+niuma-phd@users.noreply.github.com">niuma-phd</maintainer>
+  <license>Apache-2.0</license>
 
   <buildtool_depend>catkin</buildtool_depend>
   <exec_depend>auto_rover_control</exec_depend>

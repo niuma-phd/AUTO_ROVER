@@ -107,6 +107,7 @@ auto_rover_control::PurePursuitConfig pursuitConfig() {
   config.localization_freshness_ns = 150000000LL;
   config.trajectory_freshness_ns = 500000000LL;
   config.chassis_freshness_ns = 150000000LL;
+  config.safety_freshness_ns = 150000000LL;
   config.motion_valid_for_ns = 150000000LL;
   return config;
 }
@@ -325,6 +326,7 @@ class FullLoopRig {
     tracking_input.trajectory = {trajectory_, clock_.monotonicNs()};
     tracking_input.ego = {ego_, ego_receipt_ns_};
     tracking_input.chassis = {chassis_, chassis_receipt_ns_};
+    tracking_input.safety = {output.safety, clock_.monotonicNs()};
     tracking_input.now_monotonic_ns = clock_.monotonicNs();
     tracking_input.now_ros_ns = clock_.rosNs();
     output.tracking = tracker_.update(tracking_input);

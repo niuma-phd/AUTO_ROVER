@@ -48,14 +48,14 @@ bool safeConnected(const ByteTransport* transport) noexcept {
   }
 }
 
-IoResult safeWriteExactZero(ByteTransport* transport,
-                            const CommandFrame& frame,
-                            std::int64_t deadline_ns) noexcept {
+IoResult safeWrite(ByteTransport* transport, const std::uint8_t* data,
+                   std::size_t size,
+                   std::int64_t deadline_ns) noexcept {
   try {
-    if (transport == nullptr) {
+    if (transport == nullptr || data == nullptr || size == 0U) {
       return {TransportStatus::kInvalidArgument, 0U, 0, false};
     }
-    return transport->writeAll(frame.data(), frame.size(), deadline_ns);
+    return transport->writeAll(data, size, deadline_ns);
   } catch (...) {
     // An exception cannot prove how many bytes reached the stream.  Mark it
     // unknown so the caller never appends another frame on this generation.
@@ -64,6 +64,12 @@ IoResult safeWriteExactZero(ByteTransport* transport,
 }
 
 }  // namespace
+
+CommandParserResyncPadding commandParserResyncPadding() noexcept {
+  CommandParserResyncPadding padding{};
+  padding.fill(0U);
+  return padding;
+}
 
 bool physicalActivationConfigIsValid(
     const PhysicalActivationConfig& config) {
@@ -114,6 +120,7 @@ PreparedPhysicalActivation::PreparedPhysicalActivation(
   if (!encoded.ok()) {
     return;
   }
+  parser_resync_padding_ = commandParserResyncPadding();
   exact_zero_frame_ = encoded.frame;
   prepared_ = true;
 }
@@ -139,6 +146,7 @@ PhysicalActivationResult PreparedPhysicalActivation::activate(
     return result;
   }
 
+  bool unresolved_partial_or_unknown = false;
   for (std::uint32_t attempt = 0U;
        attempt < config_.max_zero_write_attempts; ++attempt) {
     if (!safeConnected(transport)) {
@@ -146,80 +154,144 @@ PhysicalActivationResult PreparedPhysicalActivation::activate(
       result.delivery_unconfirmed = true;
       return result;
     }
-    const std::int64_t write_deadline =
+    const std::int64_t padding_deadline =
         saturatedAdd(attempt_ns, config_.write_timeout_ns);
-    if (write_deadline <= 0) {
+    if (padding_deadline <= 0) {
       result.status = PhysicalActivationStatus::kClockInvalid;
       result.delivery_unconfirmed = true;
       return result;
     }
 
     ++result.attempts;
-    result.last_io =
-        safeWriteExactZero(transport, exact_zero_frame_, write_deadline);
-    const bool complete_exact_zero =
+    result.parser_resync_padding_host_write_complete = false;
+    result.exact_zero_host_write_complete = false;
+    result.last_io = safeWrite(
+        transport, parser_resync_padding_.data(),
+        parser_resync_padding_.size(), padding_deadline);
+    const bool complete_padding =
         result.last_io.status == TransportStatus::kOk &&
-        result.last_io.transferred == exact_zero_frame_.size() &&
+        result.last_io.transferred == parser_resync_padding_.size() &&
         !result.last_io.delivery_unconfirmed;
-    const bool unknown_or_partial = result.last_io.delivery_unconfirmed ||
-        (result.last_io.transferred > 0U && !complete_exact_zero);
-    if (unknown_or_partial) {
-      result.status = PhysicalActivationStatus::kWriteStreamPoisoned;
-      result.delivery_unconfirmed = true;
-      result.write_stream_poisoned = true;
-      return result;
-    }
+    const bool padding_unknown_or_partial =
+        result.last_io.delivery_unconfirmed ||
+        (result.last_io.transferred > 0U && !complete_padding);
+    result.parser_resync_padding_host_write_complete = complete_padding;
 
-    const std::int64_t after_write_ns = safeClockNow(operations_);
-    result.completed_monotonic_ns = after_write_ns;
-    if (after_write_ns <= 0 || after_write_ns < attempt_ns) {
+    const std::int64_t after_padding_ns = safeClockNow(operations_);
+    result.completed_monotonic_ns = after_padding_ns;
+    if (after_padding_ns <= 0 || after_padding_ns < attempt_ns) {
       result.status = PhysicalActivationStatus::kClockInvalid;
-      result.exact_zero_host_write_complete = complete_exact_zero;
       result.delivery_unconfirmed = true;
+      result.write_stream_poisoned = padding_unknown_or_partial;
       return result;
     }
-    if (after_write_ns > write_deadline) {
+    if (after_padding_ns > padding_deadline) {
       result.status = PhysicalActivationStatus::kDeadlineMissed;
-      result.exact_zero_host_write_complete = complete_exact_zero;
       result.delivery_unconfirmed = true;
-      return result;
-    }
-    if (complete_exact_zero) {
-      result.exact_zero_host_write_complete = true;
-      result.status = PhysicalActivationStatus::kSuccess;
+      result.write_stream_poisoned = padding_unknown_or_partial;
       return result;
     }
 
-    if (result.last_io.status == TransportStatus::kDisconnected) {
-      result.status = PhysicalActivationStatus::kTransportUnavailable;
-      result.delivery_unconfirmed = true;
-      return result;
+    std::int64_t retry_origin_ns = after_padding_ns;
+    bool sequence_complete = false;
+    if (complete_padding) {
+      const std::int64_t zero_deadline =
+          saturatedAdd(after_padding_ns, config_.write_timeout_ns);
+      if (zero_deadline <= 0) {
+        result.status = PhysicalActivationStatus::kClockInvalid;
+        result.delivery_unconfirmed = true;
+        return result;
+      }
+      result.last_io = safeWrite(transport, exact_zero_frame_.data(),
+                                 exact_zero_frame_.size(), zero_deadline);
+      const bool complete_exact_zero =
+          result.last_io.status == TransportStatus::kOk &&
+          result.last_io.transferred == exact_zero_frame_.size() &&
+          !result.last_io.delivery_unconfirmed;
+      const bool zero_unknown_or_partial =
+          result.last_io.delivery_unconfirmed ||
+          (result.last_io.transferred > 0U && !complete_exact_zero);
+      const std::int64_t after_zero_ns = safeClockNow(operations_);
+      result.completed_monotonic_ns = after_zero_ns;
+      if (after_zero_ns <= 0 || after_zero_ns < after_padding_ns) {
+        result.status = PhysicalActivationStatus::kClockInvalid;
+        result.exact_zero_host_write_complete = complete_exact_zero;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = zero_unknown_or_partial;
+        return result;
+      }
+      if (after_zero_ns > zero_deadline) {
+        result.status = PhysicalActivationStatus::kDeadlineMissed;
+        result.exact_zero_host_write_complete = complete_exact_zero;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = zero_unknown_or_partial;
+        return result;
+      }
+      if (complete_exact_zero) {
+        result.exact_zero_host_write_complete = true;
+        result.delivery_unconfirmed = false;
+        result.write_stream_poisoned = false;
+        result.status = PhysicalActivationStatus::kSuccess;
+        return result;
+      }
+      if (result.last_io.status == TransportStatus::kDisconnected) {
+        result.status = PhysicalActivationStatus::kTransportUnavailable;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = zero_unknown_or_partial;
+        return result;
+      }
+      retry_origin_ns = after_zero_ns;
+      unresolved_partial_or_unknown = zero_unknown_or_partial;
+      if (zero_unknown_or_partial) {
+        ++result.recovery_restarts;
+      }
+    } else {
+      if (result.last_io.status == TransportStatus::kDisconnected) {
+        result.status = PhysicalActivationStatus::kTransportUnavailable;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = padding_unknown_or_partial;
+        return result;
+      }
+      unresolved_partial_or_unknown = padding_unknown_or_partial;
+      if (padding_unknown_or_partial) {
+        ++result.recovery_restarts;
+      }
     }
-    if (attempt + 1U >= config_.max_zero_write_attempts) {
+
+    if (attempt + 1U < config_.max_zero_write_attempts) {
+      const std::int64_t retry_deadline = saturatedAdd(
+          retry_origin_ns, config_.zero_retry_interval_ns);
+      if (retry_deadline <= 0) {
+        result.status = PhysicalActivationStatus::kClockInvalid;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = unresolved_partial_or_unknown;
+        return result;
+      }
+      if (!safeWaitUntil(operations_, retry_deadline)) {
+        result.status = PhysicalActivationStatus::kRetryWaitFailed;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = unresolved_partial_or_unknown;
+        return result;
+      }
+      attempt_ns = safeClockNow(operations_);
+      if (attempt_ns < retry_deadline || attempt_ns < retry_origin_ns) {
+        result.status = PhysicalActivationStatus::kClockInvalid;
+        result.delivery_unconfirmed = true;
+        result.write_stream_poisoned = unresolved_partial_or_unknown;
+        return result;
+      }
+      sequence_complete = true;
+    }
+    if (!sequence_complete) {
       break;
-    }
-    const std::int64_t retry_deadline =
-        saturatedAdd(after_write_ns, config_.zero_retry_interval_ns);
-    if (retry_deadline <= 0) {
-      result.status = PhysicalActivationStatus::kClockInvalid;
-      result.delivery_unconfirmed = true;
-      return result;
-    }
-    if (!safeWaitUntil(operations_, retry_deadline)) {
-      result.status = PhysicalActivationStatus::kRetryWaitFailed;
-      result.delivery_unconfirmed = true;
-      return result;
-    }
-    attempt_ns = safeClockNow(operations_);
-    if (attempt_ns < retry_deadline || attempt_ns < after_write_ns) {
-      result.status = PhysicalActivationStatus::kClockInvalid;
-      result.delivery_unconfirmed = true;
-      return result;
     }
   }
 
-  result.status = PhysicalActivationStatus::kZeroRetriesExhausted;
+  result.status = unresolved_partial_or_unknown
+                      ? PhysicalActivationStatus::kWriteStreamPoisoned
+                      : PhysicalActivationStatus::kZeroRetriesExhausted;
   result.delivery_unconfirmed = true;
+  result.write_stream_poisoned = unresolved_partial_or_unknown;
   return result;
 }
 

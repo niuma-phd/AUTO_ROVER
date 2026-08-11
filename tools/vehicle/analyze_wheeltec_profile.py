@@ -311,8 +311,9 @@ def _validate_raw_cli_prefix(schema, records, counts):
     """Validate the physical-CLI prefix when it is present.
 
     Core/injected fixtures intentionally start at ``metadata``.  A physical
-    CLI record, however, must carry the complete preflight/open/startup-zero
-    trio in the exact order emitted before the active session begins.
+    CLI record, however, must carry the complete preflight/open/startup
+    zero-only-recovery trio in the exact order emitted before the active
+    session begins.  Historic v1 exact-zero-only prefixes remain readable.
     """
     if schema != RAW_PROFILE_SCHEMA:
         return
@@ -375,6 +376,52 @@ def _validate_raw_cli_prefix(schema, records, counts):
         "all_zero_attempts_completed_before_this_record"
     ):
         _error(zero_line, "startup exact-zero recording order is unsupported")
+
+    parser_recovery_fields = (
+        "startup_sequence",
+        "parser_resync_padding_bytes",
+        "parser_resync_padding_host_write_completed",
+        "recovery_restarts",
+        "activation_status",
+        "write_stream_poisoned",
+    )
+    parser_recovery_field_count = sum(
+        key in zero for key in parser_recovery_fields
+    )
+    if parser_recovery_field_count not in (0, len(parser_recovery_fields)):
+        _error(
+            zero_line,
+            "startup parser-recovery fields must be complete or absent "
+            "for legacy evidence",
+        )
+    if parser_recovery_field_count:
+        if _string(zero, "startup_sequence", zero_line) != (
+            "ten_zero_padding_then_exact_zero"
+        ):
+            _error(zero_line, "startup parser-recovery sequence is unsupported")
+        if _integer(zero, "parser_resync_padding_bytes", zero_line, 0) != 10:
+            _error(
+                zero_line,
+                "startup recovery requires exactly 10 zero padding bytes",
+            )
+        if not _boolean(
+            zero,
+            "parser_resync_padding_host_write_completed",
+            zero_line,
+        ):
+            _error(
+                zero_line,
+                "startup parser-resync padding host write must be complete",
+            )
+        recovery_restarts = _integer(
+            zero, "recovery_restarts", zero_line, 0
+        )
+        if recovery_restarts >= attempts:
+            _error(zero_line, "startup recovery restart count is inconsistent")
+        if _string(zero, "activation_status", zero_line) != "success":
+            _error(zero_line, "startup parser recovery must report success")
+        if _boolean(zero, "write_stream_poisoned", zero_line):
+            _error(zero_line, "startup recovery may not be poisoned")
 
     profile_ids = (
         _string(cli, "profile_id", cli_line),

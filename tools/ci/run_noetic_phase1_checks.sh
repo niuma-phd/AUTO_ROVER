@@ -53,8 +53,8 @@ integration_test_count="$(
   cmake -E chdir "${check_root}/integration" ctest -N |
     awk '/Total Tests:/ {print $3}'
 )"
-if [[ "${integration_test_count}" != "1" ]]; then
-  echo "expected one pure-core integration test, found ${integration_test_count:-none}" >&2
+if [[ "${integration_test_count}" != "2" ]]; then
+  echo "expected two control integration tests, found ${integration_test_count:-none}" >&2
   exit 1
 fi
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
@@ -73,8 +73,8 @@ wheeltec_test_count="$(
   cmake -E chdir "${check_root}/wheeltec" ctest -N |
     awk '/Total Tests:/ {print $3}'
 )"
-if [[ "${wheeltec_test_count}" != "6" ]]; then
-  echo "expected six Wheeltec sanitizer/injected/PTY tests, found ${wheeltec_test_count:-none}" >&2
+if [[ "${wheeltec_test_count}" != "7" ]]; then
+  echo "expected seven Wheeltec sanitizer/injected/PTY tests, found ${wheeltec_test_count:-none}" >&2
   exit 1
 fi
 ASAN_OPTIONS=detect_leaks=1 UBSAN_OPTIONS=halt_on_error=1 \
@@ -141,6 +141,7 @@ readonly expected_isolated_tests=(
   auto_rover_wheeltec_bench_tests
   auto_rover_wheeltec_feedback_capture_tests
   auto_rover_wheeltec_formal_backend_integration_tests
+  auto_rover_wheeltec_ordered_publication_tests
   auto_rover_wheeltec_physical_activation_tests
   auto_rover_wheeltec_raw_profile_tests
   auto_rover_wheeltec_vehicle_execution_node_contract_tests

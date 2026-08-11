@@ -91,8 +91,10 @@ Replace `7` with the observed current state ID. The service rejects a stale
 generation. To disarm, call the same service with `arm: false`; disarm does not
 clear a latched emergency stop.
 
-The fake-only fault services are `/fake_connected`, `/fake_faulted`, and
-`/fake_drop_feedback`, each using `std_srvs/SetBool`. Any injected fault or
+At the root namespace, the fake-only private services are
+`/vehicle_execution/fake_connected`, `/vehicle_execution/fake_faulted`, and
+`/vehicle_execution/fake_drop_feedback`, each using `std_srvs/SetBool` (the
+prefix follows the node namespace when remapped). Any injected fault or
 disconnect revokes authorization. Clearing it begins consecutive-fresh
 recovery and returns only to `DISARMED`; a new explicit arm is required.
 

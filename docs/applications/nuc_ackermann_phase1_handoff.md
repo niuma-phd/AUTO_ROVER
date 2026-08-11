@@ -179,17 +179,17 @@ commissioning:
 次使用前必须记录坐标系、单位、符号、时间戳、有效性、新鲜度、失效行为和版本兼容策略。
 
 ```text
-RoutePlan -> Trajectory -> MotionReference
-                           |
-EgoState ------------------+
-                           v
-ChassisState ------> guard / vehicle motion manager
-                           |
-                           v
-               VehicleExecutionCommand
-                           |
-                           v
-                   selected VCU adapter
+RoutePlan -> Trajectory -> Pure Pursuit -> MotionReference
+               EgoState ------^                 |
+           ChassisState ------^-----------------+
+            SafetyState ------^                 v
+                                      guard / vehicle motion manager
+                                                 |
+                                                 v
+                                    VehicleExecutionCommand
+                                                 |
+                                                 v
+                                         selected VCU adapter
 ```
 
 模块边界：
@@ -251,6 +251,12 @@ waypoints:
 - 轨迹包含路径位置、朝向、曲率、目标速度、方向、标识、时间/有效期和完成语义。
 - 控制器初版使用 Pure Pursuit；前视距离、到点阈值、停车距离和发布频率均为配置，并由单元
   测试覆盖。
+- 控制器把车辆执行发布的 `SafetyState` 作为必需的软件授权反馈：非 `ARMED` 状态输出有效零值
+  并重置斜坡，首次 `ARMED` 也从零建立斜坡；缺失、过期、无效或顺序回退均失效关闭。它不能
+  替代 VCU enable、命令 ACK、物理急停或后端健康门。
+- 对从未提供 `CONTROL_ENABLED_VALID` 的底盘 source，软件 `ARMED` 只允许控制器形成参考；
+  最终执行仍由 guard、车辆执行状态机和后端授权决定。同一 source 一旦提供该位，之后缺失
+  必须失效关闭，存在时仍必须以 `control_enabled=true` 才允许非零跟踪。
 - `MotionReference` 用后轴中心速度 `m/s` 和曲率 `1/m` 表达；正速度向前，正曲率左转。
 - 接近终点必须受控停车并保持零命令，不能靠轨迹话题消失实现停车。
 

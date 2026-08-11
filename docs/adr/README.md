@@ -67,3 +67,6 @@ conflict must be repaired rather than left for readers to reconcile.
 
 - [ADR 0001: NUC Ackermann phase-1 contracts and safety boundary](0001-nuc-ackermann-phase1-contracts-and-safety.md)
 - [ADR 0002: Wheeltec experimental raw-profile capture boundary](0002-wheeltec-experimental-raw-profile-capture.md)
+- [ADR 0003: Wheeltec power-isolated parser recovery and release sequencing](0003-wheeltec-power-isolated-parser-recovery.md)
+- [ADR 0004: Pure Pursuit software-safety authorization feedback](0004-pure-pursuit-safety-authorization-feedback.md)
+- [ADR 0005: Apache-2.0 license and reusable-module publication](0005-apache-2.0-license-and-reusable-module-publication.md)

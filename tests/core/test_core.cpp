@@ -49,7 +49,7 @@ auto_rover::EgoState validEgo() {
   ego.time_source = auto_rover::TimeSource::kPublishTime;
   ego.reference_frame = "rear_axle_center";
   ego.pose.orientation.w = 1.0;
-  ego.source_id = "fast_livo2_ros1_main_3df0201";
+  ego.source_id = "localization_provider_generation_1";
   ego.valid = true;
   return ego;
 }

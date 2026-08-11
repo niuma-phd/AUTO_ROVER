@@ -10,6 +10,7 @@
 #include <auto_rover_interfaces/ChassisState.h>
 #include <auto_rover_interfaces/EgoState.h>
 #include <auto_rover_interfaces/MotionReference.h>
+#include <auto_rover_interfaces/SafetyState.h>
 #include <auto_rover_interfaces/Trajectory.h>
 #include <ros/ros.h>
 
@@ -174,6 +175,8 @@ bool loadConfig(const ros::NodeHandle& private_node,
                               reason) ||
       !positiveInt64Parameter(private_node, "chassis_freshness_ns",
                               &config->tracker.chassis_freshness_ns, reason) ||
+      !positiveInt64Parameter(private_node, "safety_freshness_ns",
+                              &config->tracker.safety_freshness_ns, reason) ||
       !positiveInt64Parameter(private_node, "motion_valid_for_ns",
                               &config->tracker.motion_valid_for_ns, reason) ||
       !requireParameter(private_node, "publish_period_s",
@@ -217,6 +220,9 @@ class PurePursuitNode {
     chassis_subscriber_ =
         node_.subscribe("chassis_state", 1,
                         &PurePursuitNode::chassisCallback, this);
+    safety_subscriber_ = node_.subscribe("safety_state", 1,
+                                         &PurePursuitNode::safetyCallback,
+                                         this);
     publisher_ = node_.advertise<auto_rover_interfaces::MotionReference>("motion_reference", 1);
     timer_ = node_.createTimer(ros::Duration(config.publish_period_s),
                                &PurePursuitNode::publishCallback, this);
@@ -246,11 +252,20 @@ class PurePursuitNode {
     chassis_.receipt_monotonic_ns = receipt_monotonic_ns;
   }
 
+  void safetyCallback(
+      const auto_rover_interfaces::SafetyState::ConstPtr& message) {
+    const std::int64_t receipt_monotonic_ns =
+        toSignedNanoseconds(ros::SteadyTime::now());
+    safety_.value = auto_rover_ros1::toCore(*message);
+    safety_.receipt_monotonic_ns = receipt_monotonic_ns;
+  }
+
   void publishCallback(const ros::TimerEvent&) {
     auto_rover_control::TrackingInput input;
     input.ego = ego_;
     input.trajectory = trajectory_;
     input.chassis = chassis_;
+    input.safety = safety_;
     input.now_monotonic_ns =
         toSignedNanoseconds(ros::SteadyTime::now());
     input.now_ros_ns = toSignedNanoseconds(ros::Time::now());
@@ -269,9 +284,11 @@ class PurePursuitNode {
   auto_rover::Received<auto_rover::EgoState> ego_;
   auto_rover::Received<auto_rover::Trajectory> trajectory_;
   auto_rover::Received<auto_rover::ChassisState> chassis_;
+  auto_rover::Received<auto_rover::SafetyState> safety_;
   ros::Subscriber ego_subscriber_;
   ros::Subscriber trajectory_subscriber_;
   ros::Subscriber chassis_subscriber_;
+  ros::Subscriber safety_subscriber_;
   ros::Publisher publisher_;
   ros::Timer timer_;
 };

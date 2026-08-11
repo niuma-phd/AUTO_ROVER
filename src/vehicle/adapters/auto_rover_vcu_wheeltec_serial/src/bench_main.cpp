@@ -727,7 +727,8 @@ int main(int argc, char** argv) {
   }
 
   // The successful-open boundary contains no evidence callback or read: its
-  // first protocol I/O is the prepared no-record exact-zero transaction.
+  // first protocol I/O is the prepared zero-only parser resynchronization,
+  // followed by the exact-zero command candidate.
   const wheeltec::PhysicalActivationResult activation_result =
       activation.activate(opened.transport.get());
   if (!activation_result.succeeded()) {
@@ -736,7 +737,7 @@ int main(int argc, char** argv) {
     const bool output_ok = sink.finish();
     std::fprintf(
         stderr,
-        "wheeltec_bench_characterize: physical activation zero failed (%s, poisoned=%s, unconfirmed=%s)%s\n",
+                 "wheeltec_bench_characterize: physical zero-only activation failed (%s, poisoned=%s, unconfirmed=%s)%s\n",
         wheeltec::physicalActivationStatusName(activation_result.status),
         activation_result.write_stream_poisoned ? "true" : "false",
         activation_result.delivery_unconfirmed ? "true" : "false",
@@ -747,7 +748,7 @@ int main(int argc, char** argv) {
     opened.transport.reset();
     sink.finish();
     std::fprintf(stderr,
-                 "wheeltec_bench_characterize: cannot persist serial open result after activation zero\n");
+                 "wheeltec_bench_characterize: cannot persist serial open result after zero-only activation\n");
     return 3;
   }
 

@@ -42,3 +42,42 @@ target_link_libraries(auto_rover_full_loop_integration PRIVATE
 enable_testing()
 add_test(NAME deterministic_pure_core_full_loop
   COMMAND auto_rover_full_loop_integration)
+
+add_library(auto_rover_formal_wheeltec_control_test_support STATIC
+  "${AUTO_ROVER_ROOT}/src/core/auto_rover_core/src/geometry.cpp"
+  "${AUTO_ROVER_ROOT}/src/core/auto_rover_core/src/validation.cpp"
+  "${AUTO_ROVER_ROOT}/src/control/auto_rover_control/src/pure_pursuit.cpp"
+  "${AUTO_ROVER_ROOT}/src/safety/auto_rover_safety/src/command_guard.cpp"
+  "${AUTO_ROVER_ROOT}/src/safety/auto_rover_safety/src/safety_supervisor.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/auto_rover_vehicle/src/fake_vcu.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/auto_rover_vehicle/src/vehicle_execution_core.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/auto_rover_vehicle/src/vehicle_motion_manager.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/src/adapter.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/src/codec.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/src/runtime.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/src/stream_parser.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/src/transport.cpp"
+  "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/src/vehicle_backend.cpp")
+target_include_directories(auto_rover_formal_wheeltec_control_test_support
+  PUBLIC
+    "${AUTO_ROVER_ROOT}/src/core/auto_rover_core/include"
+    "${AUTO_ROVER_ROOT}/src/control/auto_rover_control/include"
+    "${AUTO_ROVER_ROOT}/src/safety/auto_rover_safety/include"
+    "${AUTO_ROVER_ROOT}/src/vehicle/auto_rover_vehicle/include"
+    "${AUTO_ROVER_ROOT}/src/vehicle/adapters/auto_rover_vcu_wheeltec_serial/include")
+target_compile_features(auto_rover_formal_wheeltec_control_test_support
+  PUBLIC cxx_std_14)
+target_compile_options(auto_rover_formal_wheeltec_control_test_support PRIVATE
+  -Wall -Wextra -Wpedantic -Werror)
+
+add_executable(auto_rover_formal_wheeltec_control_integration
+  test_formal_wheeltec_control.cpp)
+target_compile_features(auto_rover_formal_wheeltec_control_integration
+  PRIVATE cxx_std_14)
+target_compile_options(auto_rover_formal_wheeltec_control_integration PRIVATE
+  -Wall -Wextra -Wpedantic -Werror)
+target_link_libraries(auto_rover_formal_wheeltec_control_integration PRIVATE
+  auto_rover_formal_wheeltec_control_test_support)
+
+add_test(NAME formal_wheeltec_control_authorization_loop
+  COMMAND auto_rover_formal_wheeltec_control_integration)
