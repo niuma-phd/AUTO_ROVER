@@ -52,7 +52,7 @@ Before each push, record all of the following in the target repository's
 - the package-specific build and test results; and
 - the reviewer and publication operator. The target repository records the
   publication commit and tree symbolically as `git rev-parse HEAD` and `git
-  rev-parse HEAD^{tree}`, and records `git ls-tree -r --name-only HEAD` as the
+  rev-parse HEAD^{tree}`, and records `git ls-tree -r --full-tree HEAD` as the
   command for the complete tree listing. It does not embed its own resolved
   commit SHA, tree SHA, or a digest of `docs/source-provenance.md`; each would
   change the object it names. The resolved commit, resolved tree, complete
