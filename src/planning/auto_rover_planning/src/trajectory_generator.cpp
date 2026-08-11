@@ -13,13 +13,13 @@
 
 #include "auto_rover_core/geometry.hpp"
 #include "auto_rover_core/validation.hpp"
+#include "auto_rover_planning/resource_limits.hpp"
 
 namespace auto_rover {
 namespace planning {
 namespace {
 
 constexpr std::size_t kFeasibilityProbeIntervals = 1024U;
-constexpr std::size_t kMaximumTrajectoryPoints = 1000000U;
 constexpr double kDerivativeNormSquaredFloor = 1e-12;
 constexpr double kArcIncrementFloorM = 1e-12;
 constexpr double kCurvatureTolerance = 1e-9;
@@ -290,8 +290,7 @@ HermiteTrajectoryGenerator::HermiteTrajectoryGenerator(
 TrajectoryGenerationResult HermiteTrajectoryGenerator::generate(
     const RoutePlan& route, const VehicleProfile& profile,
     std::int64_t generation_stamp_ns) const {
-  Trajectory trajectory = makeTrajectoryMetadata(
-      route, profile, config_, generation_stamp_ns, config_.valid_for_ns);
+  Trajectory trajectory;
   if (!isFinite(config_.sampling_resolution_m) ||
       config_.sampling_resolution_m <= 0.0) {
     return failure(std::move(trajectory),
@@ -306,10 +305,35 @@ TrajectoryGenerationResult HermiteTrajectoryGenerator::generate(
                    "trajectory generation time must be positive");
   }
 
+  if (route.frame_id.size() > kMaximumFrameIdBytes) {
+    return failure(std::move(trajectory),
+                   "frame_id exceeds maximum UTF-8 byte count");
+  }
+  if (route.route_id.size() > kMaximumRouteIdBytes) {
+    return failure(std::move(trajectory),
+                   "route_id exceeds maximum UTF-8 byte count");
+  }
+  if (route.waypoints.size() > kMaximumWaypointCount) {
+    return failure(std::move(trajectory),
+                   "waypoint list exceeds maximum point count");
+  }
+  if (profile.profile_id.size() > kMaximumProfileIdBytes) {
+    return failure(std::move(trajectory),
+                   "profile_id exceeds maximum UTF-8 byte count");
+  }
+
   const ValidationResult route_result =
       validateRoutePlan(route, profile, route.frame_id);
   if (!route_result.ok) {
     return failure(std::move(trajectory), route_result.reason);
+  }
+
+  trajectory = makeTrajectoryMetadata(route, profile, config_,
+                                      generation_stamp_ns,
+                                      config_.valid_for_ns);
+  if (trajectory.trajectory_id.size() > kMaximumTrajectoryIdBytes) {
+    return failure(std::move(trajectory),
+                   "generated trajectory_id exceeds maximum byte count");
   }
 
   const double curvature_limit = maxAbsCurvature(profile);
@@ -333,13 +357,14 @@ TrajectoryGenerationResult HermiteTrajectoryGenerator::generate(
                            derivativeMagnitudeBound(segment)) /
                   config_.sampling_resolution_m);
     if (!isFinite(raw_intervals) || raw_intervals < 1.0 ||
-        raw_intervals > static_cast<double>(kMaximumTrajectoryPoints)) {
+        raw_intervals >
+            static_cast<double>(kMaximumTrajectoryPointCount)) {
       return failure(std::move(trajectory),
                      "sampling resolution produces excessive point count");
     }
     const std::size_t interval_count =
         std::max<std::size_t>(2U, static_cast<std::size_t>(raw_intervals));
-    if (interval_count > kMaximumTrajectoryPoints - total_points) {
+    if (interval_count > kMaximumTrajectoryPointCount - total_points) {
       return failure(std::move(trajectory),
                      "trajectory exceeds maximum point count");
     }

@@ -45,14 +45,19 @@ Before each push, record all of the following in the target repository's
 - a deterministic digest inventory of every exported package and test file;
 - the extraction tool and version, the complete path allowlist, and any path
   renames;
-- the filtered source tip, the export-bootstrap tree contents, and every file
-  the bootstrap commit adds or modifies;
+- the filtered source tip, the exact relative-path list of every file the
+  bootstrap commit adds or modifies, and the commands that reproduce the
+  complete publication tree listing;
 - the exact commit pins used for AUTO_ROVER package dependencies;
 - the package-specific build and test results; and
 - the reviewer and publication operator. The target repository records the
-  publication commit symbolically as `git rev-parse HEAD`; its resolved SHA and
-  UTC push time are written back to the canonical AUTO_ROVER publication
-  record, because a commit cannot contain its own SHA without changing it.
+  publication commit and tree symbolically as `git rev-parse HEAD` and `git
+  rev-parse HEAD^{tree}`, and records `git ls-tree -r --name-only HEAD` as the
+  command for the complete tree listing. It does not embed its own resolved
+  commit SHA, tree SHA, or a digest of `docs/source-provenance.md`; each would
+  change the object it names. The resolved commit, resolved tree, complete
+  listing, UTC push time, and post-push comparison are written back to the
+  canonical AUTO_ROVER publication record.
 
 Export from a fresh read-only mirror of the reviewed commit with a path
 allowlist. Do not copy from a dirty working tree, use a denylist as the primary
@@ -88,6 +93,17 @@ Every exported `package.xml` must declare `Apache-2.0`. Dependencies keep their
 own licenses. No dependency source is vendored merely to make the exported
 repository self-contained.
 
+The assembled tree must verify the root `LICENSE` against the reviewed
+AUTO_ROVER SHA-256
+`c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4` and
+parse the target `package.xml` to require exactly the `Apache-2.0`
+declaration. The pre-push publication-record check also requires
+the extraction tool and version, complete allowlist, filtered source tip,
+source/test digest inventory, bootstrap file list, dependency pins, test and
+scan results, operator/reviewer, and a valid UTC verification time. The same
+checks run in CI after publication; a green CI result is not a substitute for
+the pre-push record.
+
 ### Common include allowlist
 
 Each repository's allowlist is exactly the union of:
@@ -110,8 +126,8 @@ The following remain excluded from all seven initial repositories even if they
 are Apache-2.0 project-authored material:
 
 - `docs/evidence/**`, raw recordings, bags, maps, captures, analysis output,
-  local absolute paths, device identities, operator attestations, and field or
-  raised-wheel results;
+  host-, user-, workspace-, or device-specific absolute paths, device
+  identities, operator attestations, and field or raised-wheel results;
 - `docs/applications/**`, `docs/vehicles/**`, hardware-acceptance results, and
   vehicle commissioning or deployment runbooks;
 - `src/apps/**`, `deploy/**`, udev rules, real vehicle profiles, localization
@@ -137,6 +153,13 @@ After filtering, scan every reachable object and commit message for excluded
 paths, device identifiers, local paths, secrets, binary objects, and unreviewed
 third-party material. An allowlist match is necessary but not sufficient for a
 push.
+
+Before the first source push, create an active repository ruleset that rejects
+tag creation. The source CI intentionally runs only for `main` pushes and pull
+requests, so an in-workflow `GITHUB_REF` comparison cannot enforce the no-tag
+policy. After every publication push, query GitHub for repository visibility,
+rulesets, tags, and releases, and record that the repository is public, the tag
+creation rule is active, and no tag or release exists.
 
 ## Dependency and publication topology
 
@@ -283,10 +306,12 @@ the export does not copy localization or control tests.
 
 Required documentation defines the strict YAML schema, route identity and
 version replacement rules, failed-reload invalidation, Hermite construction,
-feasibility probes, sampling, deterministic trajectory identity, point and
-string resource limits, and `STOP_AND_HOLD`. A synthetic YAML snippet may be
-written for documentation, but no vehicle route or known map is copied from
-bringup.
+feasibility probes, sampling, deterministic trajectory identity, and
+`STOP_AND_HOLD`. It records the proposed resource envelope from ADR 0006:
+1,048,576 YAML bytes before parsing, 64-byte keys and numeric scalars, 210-byte
+route IDs, 256-byte frame/profile/generated-trajectory IDs, 2,048 input
+waypoints, and 4,096 total output points. A synthetic YAML snippet may be written
+for documentation, but no vehicle route or known map is copied from bringup.
 
 Build and test acceptance requires the pinned dependency workspace, yaml-cpp
 revision check, execution of `auto_rover_planning_tests`, the package-specific
@@ -470,6 +495,8 @@ specific package:
 - [ ] README and provenance documents state incubation status, canonical
   ownership, source path and commit, dependencies, maturity, and no
   tag/release/safety claim.
+- [ ] The structured publication record contains every required field, no
+  unresolved sentinel, and no self-referential resolved commit/tree digest.
 - [ ] Every AUTO_ROVER dependency is pinned by full target-repository commit,
   and every external dependency matches the reviewed register and Noetic lock.
 - [ ] Package-specific build, test, sanitizer where applicable, install, and
@@ -480,6 +507,8 @@ specific package:
   evidence, and provenance scanning.
 - [ ] No Git tag, GitHub release, package index release, binary artifact, or
   claim of independent compatibility or vehicle readiness is created.
+- [ ] The GitHub repository is public, its tag-creation blocking ruleset is
+  active, and post-push API checks report zero tags and zero releases.
 - [ ] The target commit and publication time are written back to the canonical
   review record.
 

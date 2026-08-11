@@ -96,8 +96,10 @@ The reproducible source audit is in
   target-platform package; upgrades require route corpus, duplicate-key,
   non-finite-value, and ABI review
 - Safety/security relevance: parses operator-edited input that can command
-  motion; unknown keys, malformed values, resource-expanding routes, and invalid
-  geometry fail closed
+  motion; a 1 MiB envelope is checked before the pinned parser sees either file
+  or string input, and strict key/scalar/identity/waypoint budgets plus invalid
+  geometry fail closed as proposed in
+  [ADR 0006](../adr/0006-bounded-known-map-planning-resources.md)
 - Owner: niuma-phd
 - Approval evidence: MIT/X11 system-linking review recorded here and bounded
   publication approval in [issue #12](https://github.com/niuma-phd/AUTO_ROVER/issues/12)

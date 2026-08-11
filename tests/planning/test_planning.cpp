@@ -1,7 +1,9 @@
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <fstream>
 #include <limits>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -9,6 +11,7 @@
 #include <unistd.h>
 
 #include "auto_rover_planning/route_repository.hpp"
+#include "auto_rover_planning/resource_limits.hpp"
 #include "auto_rover_planning/trajectory_generator.hpp"
 #include "auto_rover_planning/waypoint_loader.hpp"
 
@@ -60,6 +63,33 @@ std::string validYaml(std::uint64_t plan_version = 1U,
          "waypoints:\n"
          "  - {x_m: 0.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}\n"
          "  - {x_m: 2.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}\n";
+}
+
+std::string yamlWithFrameAndRoute(const std::string& frame_id,
+                                  const std::string& route_id) {
+  return "schema_version: 1\n"
+         "frame_id: " +
+         frame_id + "\n" + "route_id: " + route_id + "\n" +
+         "plan_version: 1\n"
+         "loop: false\n"
+         "waypoints:\n"
+         "  - {x_m: 0.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}\n"
+         "  - {x_m: 2.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}\n";
+}
+
+std::string yamlWithWaypointCount(std::size_t waypoint_count) {
+  std::ostringstream output;
+  output << "schema_version: 1\n"
+            "frame_id: camera_init\n"
+            "route_id: resource_boundary\n"
+            "plan_version: 1\n"
+            "loop: false\n"
+            "waypoints:\n";
+  for (std::size_t index = 0U; index < waypoint_count; ++index) {
+    output << "  - {x_m: " << index
+           << ", y_m: 0, yaw_rad: 0, speed_mps: 0.50}\n";
+  }
+  return output.str();
 }
 
 auto_rover::RoutePlan straightRoute() {
@@ -247,6 +277,147 @@ void testFileLoader() {
                        "missing waypoint file fails closed");
 }
 
+void testWaypointLoaderEnforcesIdentityAndScalarBudgets() {
+  using auto_rover::planning::kMaximumFrameIdBytes;
+  using auto_rover::planning::kMaximumNumericScalarBytes;
+  using auto_rover::planning::kMaximumRouteIdBytes;
+
+  const auto_rover::planning::WaypointYamlLoader loader(validProfile(),
+                                                         "camera_init");
+  const std::string exact_route_id(kMaximumRouteIdBytes, 'r');
+  expect(loader.loadString(validYaml(1U, exact_route_id), 1LL).validation.ok,
+         "route identity at its UTF-8 byte budget is accepted");
+  expectReasonContains(
+      loader
+          .loadString(validYaml(1U, exact_route_id + "r"), 1LL)
+          .validation,
+      "route_id exceeds", "route identity over its byte budget is rejected");
+
+  const std::string two_byte_utf8 = "\xC2\xA2";
+  std::string exact_multibyte_route_id;
+  for (std::size_t index = 0U; index < kMaximumRouteIdBytes / 2U; ++index) {
+    exact_multibyte_route_id += two_byte_utf8;
+  }
+  expect(exact_multibyte_route_id.size() == kMaximumRouteIdBytes,
+         "multibyte identity fixture reaches the byte budget exactly");
+  expect(loader
+             .loadString(validYaml(1U, exact_multibyte_route_id), 2LL)
+             .validation.ok,
+         "identity budget is measured in UTF-8 bytes, not code points");
+  expectReasonContains(
+      loader
+          .loadString(validYaml(1U,
+                                exact_multibyte_route_id + two_byte_utf8),
+                      3LL)
+          .validation,
+      "route_id exceeds",
+      "one additional multibyte code point exceeds the byte budget");
+
+  const std::string exact_frame_id(kMaximumFrameIdBytes, 'f');
+  const auto_rover::planning::WaypointYamlLoader exact_frame_loader(
+      validProfile(), exact_frame_id);
+  expect(exact_frame_loader
+             .loadString(yamlWithFrameAndRoute(exact_frame_id, "route"), 4LL)
+             .validation.ok,
+         "frame identity at its UTF-8 byte budget is accepted");
+  expectReasonContains(
+      exact_frame_loader
+          .loadString(
+              yamlWithFrameAndRoute(exact_frame_id + "f", "route"), 5LL)
+          .validation,
+      "frame_id exceeds", "frame identity over its byte budget is rejected");
+
+  const std::string exact_numeric_scalar =
+      "0." + std::string(kMaximumNumericScalarBytes - 2U, '0');
+  std::string exact_numeric_yaml = validYaml();
+  exact_numeric_yaml.replace(exact_numeric_yaml.find("x_m: 0.0"),
+                             std::string("x_m: 0.0").size(),
+                             "x_m: " + exact_numeric_scalar);
+  expect(loader.loadString(exact_numeric_yaml, 6LL).validation.ok,
+         "finite numeric scalar at its byte budget is accepted");
+  std::string excessive_numeric_yaml = validYaml();
+  excessive_numeric_yaml.replace(
+      excessive_numeric_yaml.find("x_m: 0.0"),
+      std::string("x_m: 0.0").size(),
+      "x_m: " + exact_numeric_scalar + "0");
+  expectReasonContains(loader.loadString(excessive_numeric_yaml, 7LL).validation,
+                       "numeric scalar exceeds",
+                       "numeric scalar over its byte budget is rejected");
+
+  const std::string exact_key(auto_rover::planning::kMaximumYamlKeyBytes, 'k');
+  expectReasonContains(
+      loader.loadString(validYaml() + exact_key + ": value\n", 8LL)
+          .validation,
+      "unknown", "a key at the byte budget reaches strict-schema validation");
+  const std::string excessive_key = exact_key + "k";
+  expectReasonContains(
+      loader.loadString(validYaml() + excessive_key + ": value\n", 9LL)
+          .validation,
+      "map key exceeds", "oversized YAML keys fail before error expansion");
+
+  std::string excessive_boolean_yaml = validYaml();
+  excessive_boolean_yaml.replace(excessive_boolean_yaml.find("loop: false"),
+                                  std::string("loop: false").size(),
+                                  "loop: falsex");
+  expectReasonContains(
+      loader.loadString(excessive_boolean_yaml, 10LL).validation,
+      "boolean scalar exceeds",
+      "boolean scalar over its syntax-sized budget is rejected");
+}
+
+void testWaypointLoaderEnforcesDocumentAndWaypointBudgets() {
+  using auto_rover::planning::kMaximumWaypointCount;
+  using auto_rover::planning::kMaximumWaypointYamlBytes;
+
+  const auto_rover::planning::WaypointYamlLoader loader(validProfile(),
+                                                         "camera_init");
+  std::string exact_document = validYaml();
+  exact_document += '#';
+  exact_document.append(kMaximumWaypointYamlBytes - exact_document.size(),
+                        'x');
+  expect(exact_document.size() == kMaximumWaypointYamlBytes,
+         "document fixture reaches the byte budget exactly");
+  expect(loader.loadString(exact_document, 1LL).validation.ok,
+         "string document at the byte budget is parsed");
+
+  const std::string excessive_document = exact_document + "x";
+  expectReasonContains(loader.loadString(excessive_document, 2LL).validation,
+                       "document exceeds",
+                       "oversized string input is rejected before parsing");
+
+  const std::string path =
+      "/tmp/auto_rover_waypoint_budget_" +
+      std::to_string(static_cast<long long>(::getpid())) + ".yaml";
+  {
+    std::ofstream output(path, std::ios::binary);
+    output << exact_document;
+  }
+  expect(loader.loadFile(path, 3LL).validation.ok,
+         "file document at the byte budget is parsed");
+  {
+    std::ofstream output(path, std::ios::binary | std::ios::trunc);
+    output << excessive_document;
+  }
+  expectReasonContains(loader.loadFile(path, 4LL).validation,
+                       "document exceeds",
+                       "oversized file is rejected before YAML parsing");
+  expect(std::remove(path.c_str()) == 0,
+         "resource-budget file fixture is removed");
+
+  const std::string maximum_waypoints =
+      yamlWithWaypointCount(kMaximumWaypointCount);
+  expect(maximum_waypoints.size() < kMaximumWaypointYamlBytes,
+         "maximum waypoint fixture remains within the document budget");
+  expect(loader.loadString(maximum_waypoints, 5LL).validation.ok,
+         "waypoint sequence at its count budget is accepted");
+  expectReasonContains(
+      loader
+          .loadString(yamlWithWaypointCount(kMaximumWaypointCount + 1U), 6LL)
+          .validation,
+      "waypoint list exceeds",
+      "waypoint sequence over its count budget is rejected before iteration");
+}
+
 void testRouteRepositoryInvalidatesOnEveryFailedReload() {
   auto_rover::planning::RouteRepository repository(validProfile(),
                                                     "camera_init");
@@ -417,6 +588,97 @@ void testTrajectoryGeneratorRejectsInvalidInputs() {
       "time", "non-positive trajectory generation time is rejected");
 }
 
+void testTrajectoryGeneratorEnforcesPlanningResourceBudgets() {
+  using auto_rover::planning::kMaximumFrameIdBytes;
+  using auto_rover::planning::kMaximumProfileIdBytes;
+  using auto_rover::planning::kMaximumRouteIdBytes;
+  using auto_rover::planning::kMaximumTrajectoryPointCount;
+  using auto_rover::planning::kMaximumWaypointCount;
+
+  auto_rover::planning::TrajectoryGeneratorConfig config;
+  config.sampling_resolution_m = 1.0;
+  config.valid_for_ns = 1LL;
+  const auto_rover::planning::HermiteTrajectoryGenerator generator(config);
+
+  auto exact_points_route = straightRoute();
+  exact_points_route.waypoints.back().x_m =
+      static_cast<double>(kMaximumTrajectoryPointCount - 1U);
+  const auto exact_points =
+      generator.generate(exact_points_route, validProfile(), 1LL);
+  expect(exact_points.validation.ok,
+         "trajectory at the execution point budget is accepted");
+  expect(exact_points.trajectory.points.size() ==
+             kMaximumTrajectoryPointCount,
+         "the trajectory point budget includes both segment endpoints");
+
+  auto maximum_waypoint_route = straightRoute();
+  maximum_waypoint_route.route_id = "maximum_waypoint_route";
+  maximum_waypoint_route.waypoints.clear();
+  maximum_waypoint_route.waypoints.reserve(kMaximumWaypointCount);
+  for (std::size_t index = 0U; index < kMaximumWaypointCount; ++index) {
+    maximum_waypoint_route.waypoints.push_back(
+        {static_cast<double>(index), 0.0, 0.0, 0.50});
+  }
+  const auto maximum_waypoints =
+      generator.generate(maximum_waypoint_route, validProfile(), 2LL);
+  expect(maximum_waypoints.validation.ok,
+         "maximum waypoint input fits when every segment uses two intervals");
+  expect(maximum_waypoints.trajectory.points.size() ==
+             2U * kMaximumWaypointCount - 1U,
+         "2,048 waypoints produce the expected minimum 4,095 points");
+
+  auto excessive_points_route = exact_points_route;
+  excessive_points_route.waypoints.back().x_m =
+      static_cast<double>(kMaximumTrajectoryPointCount);
+  const auto excessive_points =
+      generator.generate(excessive_points_route, validProfile(), 3LL);
+  expectReasonContains(excessive_points.validation, "maximum point count",
+                       "one output point over the budget is rejected");
+  expect(!excessive_points.trajectory.valid &&
+             excessive_points.trajectory.points.empty(),
+         "over-budget trajectory output fails closed and remains empty");
+
+  auto exact_identity_route = straightRoute();
+  exact_identity_route.route_id.assign(kMaximumRouteIdBytes, 'r');
+  exact_identity_route.plan_version =
+      std::numeric_limits<std::uint64_t>::max();
+  const auto exact_identity =
+      generator.generate(exact_identity_route, validProfile(), 4LL);
+  expect(exact_identity.validation.ok,
+         "worst-case generated identity within its budget is accepted");
+  expect(exact_identity.trajectory.trajectory_id.size() ==
+             auto_rover::planning::kMaximumTrajectoryIdBytes,
+         "route budget accounts for separators, version, and fingerprint");
+
+  auto excessive_route_id = straightRoute();
+  excessive_route_id.route_id.assign(kMaximumRouteIdBytes + 1U, 'r');
+  expectReasonContains(
+      generator.generate(excessive_route_id, validProfile(), 5LL).validation,
+      "route_id exceeds",
+      "programmatic routes cannot bypass the route identity budget");
+
+  auto excessive_frame_id = straightRoute();
+  excessive_frame_id.frame_id.assign(kMaximumFrameIdBytes + 1U, 'f');
+  expectReasonContains(
+      generator.generate(excessive_frame_id, validProfile(), 6LL).validation,
+      "frame_id exceeds",
+      "programmatic routes cannot bypass the frame identity budget");
+
+  auto excessive_waypoints = straightRoute();
+  excessive_waypoints.waypoints.resize(kMaximumWaypointCount + 1U);
+  expectReasonContains(
+      generator.generate(excessive_waypoints, validProfile(), 7LL).validation,
+      "waypoint list exceeds",
+      "programmatic routes cannot bypass the waypoint count budget");
+
+  auto excessive_profile = validProfile();
+  excessive_profile.profile_id.assign(kMaximumProfileIdBytes + 1U, 'p');
+  expectReasonContains(
+      generator.generate(straightRoute(), excessive_profile, 8LL).validation,
+      "profile_id exceeds",
+      "generated trajectories cannot carry an oversized profile identity");
+}
+
 }  // namespace
 
 TEST(WaypointYamlLoaderTest, AcceptsValidInput) {
@@ -433,6 +695,14 @@ TEST(WaypointYamlLoaderTest, RejectsContractViolations) {
 
 TEST(WaypointYamlLoaderTest, LoadsFiles) { testFileLoader(); }
 
+TEST(WaypointYamlLoaderTest, EnforcesIdentityAndScalarBudgets) {
+  testWaypointLoaderEnforcesIdentityAndScalarBudgets();
+}
+
+TEST(WaypointYamlLoaderTest, EnforcesDocumentAndWaypointBudgets) {
+  testWaypointLoaderEnforcesDocumentAndWaypointBudgets();
+}
+
 TEST(RouteRepositoryTest, InvalidatesOnEveryFailedReload) {
   testRouteRepositoryInvalidatesOnEveryFailedReload();
 }
@@ -447,6 +717,10 @@ TEST(HermiteTrajectoryGeneratorTest, UsesYawAndChecksCurvature) {
 
 TEST(HermiteTrajectoryGeneratorTest, RejectsInvalidInputs) {
   testTrajectoryGeneratorRejectsInvalidInputs();
+}
+
+TEST(HermiteTrajectoryGeneratorTest, EnforcesPlanningResourceBudgets) {
+  testTrajectoryGeneratorEnforcesPlanningResourceBudgets();
 }
 
 int main(int argc, char** argv) {

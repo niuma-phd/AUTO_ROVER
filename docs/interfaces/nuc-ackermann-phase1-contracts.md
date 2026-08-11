@@ -85,12 +85,21 @@ replay from a retired generation fails closed.
 | `loop` | Whether completion connects to the first point; phase-1 commissioning configuration is false. |
 | `waypoints` | Ordered finite x/y/yaw and non-negative forward target-speed magnitudes. |
 
-The fixed YAML loader rejects an empty list, unknown/duplicate keys, malformed
-numbers, non-finite values, duplicate adjacent positions, wrong frame, empty
+The fixed YAML loader checks a 1,048,576-byte document limit before parsing,
+then rejects an empty or over-2,048-point list, keys over 64 bytes,
+unknown/duplicate keys, numeric scalars over 64 bytes, malformed numbers,
+non-finite values, duplicate positions, wrong frame, empty or oversized
 identity, non-increasing replacement version, a negative speed, speed above the
 profile, reverse intent, and geometry whose sampled curvature exceeds the
-profile. Reload is transactional: failure invalidates active route execution and
-does not keep executing the old plan.
+profile. `frame_id` is limited to 256 UTF-8 bytes. `route_id` is limited to 210
+UTF-8 bytes so its worst-case derived trajectory identity still fits the
+256-byte execution identity boundary. File input is read into the same bounded
+byte sequence used by the string entry point before `yaml-cpp` is invoked.
+Limits count encoded bytes rather than Unicode code points. Reload is
+transactional: failure invalidates active route execution and does not keep
+executing the old plan. The compile-time limits and their derivation are
+proposed in
+[ADR 0006](../adr/0006-bounded-known-map-planning-resources.md).
 
 ## `Trajectory`
 
@@ -129,18 +138,21 @@ sequencing identity, not an integrity or authenticity proof. A failed reload
 publishes an invalid empty trajectory instead of refreshing the previous
 generation.
 
-Planning may reject or construct a larger offline candidate, but the
-safety-critical vehicle-execution consumer accepts no more than 4,096 points.
-At the selected 0.05 m sample spacing this is approximately 204.8 m of sampled
-path. Every frame, route, trajectory, profile, source, producer, request, and
-operator identity crossing the execution boundary is limited to 256 bytes;
-the per-process retired source/trajectory/route ordering histories are capped
-at 1,024 entries each. The ROS wrapper checks these sizes in constant time
-before conversion and before taking the execution mutex, and the ROS-free core
-rechecks them. Over-limit input is rejected without truncation and revokes
-execution. The formal physical wrapper treats it as terminal and exits after
-the bounded stop path; a direct core integration remains disarmed and requires
-its normal fresh-input recovery plus a new explicit arm.
+Planning and the safety-critical vehicle-execution consumer each accept no more
+than 4,096 total trajectory points, including the first point. Point accounting
+is completed before sampling allocation; an exact 4,096-point result is allowed
+and the 4,097th point fails closed without truncation. At the selected 0.05 m
+sample spacing this is approximately 204.8 m of sampled path. The generated
+`trajectory_id`, frame, profile, source, producer, request, and operator
+identities crossing the execution boundary are limited to 256 bytes; planning's
+derived-ID rule makes `route_id` stricter at 210 bytes. The per-process retired
+source/trajectory/route ordering histories are capped at 1,024 entries each.
+The ROS wrapper checks execution sizes in constant time before conversion and
+before taking the execution mutex, and the ROS-free execution core rechecks
+them. Over-limit input revokes execution. The formal physical wrapper treats it
+as terminal and exits after the bounded stop path; a direct core integration
+remains disarmed and requires its normal fresh-input recovery plus a new
+explicit arm.
 
 ## `MotionReference`
 

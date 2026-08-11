@@ -70,3 +70,4 @@ conflict must be repaired rather than left for readers to reconcile.
 - [ADR 0003: Wheeltec power-isolated parser recovery and release sequencing](0003-wheeltec-power-isolated-parser-recovery.md)
 - [ADR 0004: Pure Pursuit software-safety authorization feedback](0004-pure-pursuit-safety-authorization-feedback.md)
 - [ADR 0005: Apache-2.0 license and reusable-module publication](0005-apache-2.0-license-and-reusable-module-publication.md)
+- [ADR 0006: Bounded known-map planning resources](0006-bounded-known-map-planning-resources.md)

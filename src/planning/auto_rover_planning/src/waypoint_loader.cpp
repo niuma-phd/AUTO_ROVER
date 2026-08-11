@@ -1,7 +1,9 @@
 #include "auto_rover_planning/waypoint_loader.hpp"
 
+#include <array>
 #include <cmath>
 #include <cstdint>
+#include <fstream>
 #include <limits>
 #include <regex>
 #include <set>
@@ -13,6 +15,7 @@
 
 #include "auto_rover_core/geometry.hpp"
 #include "auto_rover_core/validation.hpp"
+#include "auto_rover_planning/resource_limits.hpp"
 
 namespace auto_rover {
 namespace planning {
@@ -39,6 +42,10 @@ ValidationResult validateMapKeys(const YAML::Node& node,
       return ValidationResult::failure(context + " has a non-scalar key");
     }
     const std::string key = entry.first.Scalar();
+    if (key.size() > kMaximumYamlKeyBytes) {
+      return ValidationResult::failure(context +
+                                       " map key exceeds maximum byte count");
+    }
     if (!seen.insert(key).second) {
       return ValidationResult::failure(context + " has duplicate key: " + key);
     }
@@ -56,11 +63,16 @@ ValidationResult validateMapKeys(const YAML::Node& node,
 
 ValidationResult parseNonEmptyString(const YAML::Node& node,
                                      const std::string& name,
+                                     std::size_t maximum_bytes,
                                      std::string* output) {
   if (output == nullptr || !node.IsScalar()) {
     return ValidationResult::failure(name + " must be a string");
   }
   const std::string value = node.Scalar();
+  if (value.size() > maximum_bytes) {
+    return ValidationResult::failure(
+        name + " exceeds maximum UTF-8 byte count");
+  }
   if (value.empty() || value.find_first_not_of(" \t\r\n") == std::string::npos) {
     return ValidationResult::failure(name + " must not be empty");
   }
@@ -75,6 +87,10 @@ ValidationResult parseUnsigned(const YAML::Node& node, const std::string& name,
     return ValidationResult::failure(name + " must be an unsigned integer");
   }
   const std::string text = node.Scalar();
+  if (text.size() > kMaximumNumericScalarBytes) {
+    return ValidationResult::failure(name +
+                                     " numeric scalar exceeds maximum byte count");
+  }
   if (text.empty() ||
       text.find_first_not_of("0123456789") != std::string::npos) {
     return ValidationResult::failure(name + " has invalid version syntax");
@@ -98,6 +114,10 @@ ValidationResult parseBoolean(const YAML::Node& node, const std::string& name,
     return ValidationResult::failure(name + " must be true or false");
   }
   const std::string text = node.Scalar();
+  if (text.size() > kMaximumBooleanScalarBytes) {
+    return ValidationResult::failure(name +
+                                     " boolean scalar exceeds maximum byte count");
+  }
   if (text == "true") {
     *output = true;
     return ValidationResult::success();
@@ -115,6 +135,10 @@ ValidationResult parseFiniteDecimal(const YAML::Node& node,
     return ValidationResult::failure(name + " must be a finite number");
   }
   const std::string text = node.Scalar();
+  if (text.size() > kMaximumNumericScalarBytes) {
+    return ValidationResult::failure(name +
+                                     " numeric scalar exceeds maximum byte count");
+  }
   static const std::regex decimal_pattern(
       "^[+-]?([0-9]+([.][0-9]*)?|[.][0-9]+)([eE][+-]?[0-9]+)?$");
   if (!std::regex_match(text, decimal_pattern)) {
@@ -166,11 +190,13 @@ RouteLoadResult parseRoute(const YAML::Node& root,
     return failure("unsupported waypoint schema version");
   }
 
-  result = parseNonEmptyString(root["frame_id"], "frame_id", &route.frame_id);
+  result = parseNonEmptyString(root["frame_id"], "frame_id",
+                               kMaximumFrameIdBytes, &route.frame_id);
   if (!result.ok) {
     return failure(result.reason);
   }
-  result = parseNonEmptyString(root["route_id"], "route_id", &route.route_id);
+  result = parseNonEmptyString(root["route_id"], "route_id",
+                               kMaximumRouteIdBytes, &route.route_id);
   if (!result.ok) {
     return failure(result.reason);
   }
@@ -191,6 +217,9 @@ RouteLoadResult parseRoute(const YAML::Node& root,
   const YAML::Node waypoint_nodes = root["waypoints"];
   if (!waypoint_nodes.IsSequence() || waypoint_nodes.size() < 2U) {
     return failure("waypoint list must contain at least two points");
+  }
+  if (waypoint_nodes.size() > kMaximumWaypointCount) {
+    return failure("waypoint list exceeds maximum point count");
   }
   const std::set<std::string> waypoint_keys{"x_m", "y_m", "yaw_rad",
                                              "speed_mps"};
@@ -253,19 +282,37 @@ WaypointYamlLoader::WaypointYamlLoader(VehicleProfile profile,
 
 RouteLoadResult WaypointYamlLoader::loadFile(
     const std::string& path, std::int64_t load_stamp_ns) const {
-  try {
-    return parseRoute(YAML::LoadFile(path), profile_, expected_frame_,
-                      load_stamp_ns);
-  } catch (const YAML::BadFile& error) {
-    return failure("waypoint file could not be read: " +
-                   std::string(error.what()));
-  } catch (const YAML::Exception& error) {
-    return failure("waypoint YAML parse error: " + std::string(error.what()));
+  std::ifstream input(path, std::ios::binary);
+  if (!input.is_open()) {
+    return failure("waypoint file could not be read");
   }
+
+  std::string yaml_text;
+  yaml_text.reserve(8192U);
+  std::array<char, 8192U> buffer{};
+  while (input) {
+    input.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+    const std::streamsize count = input.gcount();
+    if (count <= 0) {
+      continue;
+    }
+    const std::size_t byte_count = static_cast<std::size_t>(count);
+    if (byte_count > kMaximumWaypointYamlBytes - yaml_text.size()) {
+      return failure("waypoint YAML document exceeds maximum byte count");
+    }
+    yaml_text.append(buffer.data(), byte_count);
+  }
+  if (input.bad() || (!input.eof() && input.fail())) {
+    return failure("waypoint file could not be read completely");
+  }
+  return loadString(yaml_text, load_stamp_ns);
 }
 
 RouteLoadResult WaypointYamlLoader::loadString(
     const std::string& yaml_text, std::int64_t load_stamp_ns) const {
+  if (yaml_text.size() > kMaximumWaypointYamlBytes) {
+    return failure("waypoint YAML document exceeds maximum byte count");
+  }
   try {
     return parseRoute(YAML::Load(yaml_text), profile_, expected_frame_,
                       load_stamp_ns);
