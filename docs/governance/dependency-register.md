@@ -177,6 +177,29 @@ The reproducible source audit is in
 - Container: `ros:noetic-ros-core-focal` amd64 manifest digest
   `sha256:4c1435fd85be3edde3820f0d132ab30a6b030209dce4fa3ac428a2aa5a763caf`;
   tags without this digest are not equivalent evidence
+- Container-installed build tool: the pinned digest contains
+  `ros-noetic-catkin=0.8.12-1focal.20250426.001935`. Incubation repository
+  locks retain and verify that exact container revision; this intentionally
+  differs from the NUC target-host lock at catkin `0.8.11` and does not change
+  the Phase-1 deployment toolchain.
+- Container-installed ROS revisions used across the package-scoped locks are
+  fixed as follows; an individual repository retains only the rows required by
+  its dependency closure:
+
+  | Package | Exact revision in the pinned container |
+  |---|---|
+  | `ros-noetic-geometry-msgs` | `1.13.2-1focal.20250426.011953` |
+  | `ros-noetic-message-generation` | `0.4.1-1focal.20250426.010337` |
+  | `ros-noetic-message-runtime` | `0.4.13-1focal.20250426.011132` |
+  | `ros-noetic-roscpp` | `1.17.4-1focal.20250519.225343` |
+  | `ros-noetic-rosmsg` | `1.17.4-1focal.20250519.234838` |
+  | `ros-noetic-std-msgs` | `0.5.14-1focal.20250426.011621` |
+  | `ros-noetic-std-srvs` | `1.11.4-1focal.20250426.011617` |
+
+  These are CI-image facts, not replacements for the independently pinned NUC
+  target-host revisions. Every public workflow first verifies package state
+  and exact version, installs only genuinely missing packages, then repeats the
+  complete exact-version check before building.
 - Dependency import tool: Ubuntu/ROS package `python3-vcstool=0.3.0-1`, used
   only in dependent-module CI to materialize the full-commit pins in
   `auto-rover.repos`

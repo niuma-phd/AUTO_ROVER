@@ -1,19 +1,25 @@
 # Reusable module publication manifest
 
-- Status: approved export plan; no module repository has been created
+- Status: six commit-pinned public incubation repositories published and
+  verified after push; planning remains blocked and has not been created
 - Governing decision: [ADR 0005](../adr/0005-apache-2.0-license-and-reusable-module-publication.md)
 - Approval evidence: repository-owner decision in issue #12, including its
   historical-author identity confirmation
+- Publication evidence:
+  [2026-08-12 reusable-module publication record](../evidence/2026-08-12-reusable-module-publication.md)
 - Canonical source: `niuma-phd/AUTO_ROVER`
 - Initial publication mode: commit-pinned incubation source only
 - Tags and releases: prohibited for the initial publication
 
 ## Purpose and authority boundary
 
-This manifest defines the bounded source export for the first seven reusable
-ROS 1 packages. It authorizes preparation and review of those exports; it does
-not create a GitHub repository, transfer release authority, or turn an exported
-copy into the canonical source.
+This manifest defines the bounded source export for seven reusable ROS 1
+packages. Six exports -- core, interfaces, ROS 1 conversions, control, safety,
+and vehicle -- are public commit-pinned incubation repositories whose
+post-push state is verified in the publication record. Planning has not been
+created because ADR 0006 remains Proposed and has no explicit repository-owner
+acceptance. Publication under this manifest does not transfer release authority
+or turn an exported copy into the canonical source.
 
 Every initial repository must identify one reviewed AUTO_ROVER commit with its
 full 40-character Git SHA. The package source and package-specific tests in the
@@ -29,9 +35,12 @@ accept divergent package behavior, independent semantic versions, ROS release
 tags, binary releases, or vehicle-safety claims. Their `package.xml` version is
 source metadata, not evidence of an independently supported release.
 
-The repositories named below are targets only. They do not exist merely
-because their names appear in this document, and this manifest must not be used
-to infer that a push occurred.
+The repository URLs and publication summaries below describe the recorded
+post-push state, not an authority inferred from names in this manifest. Exact
+publication commits, trees, complete listings, UTC push times, CI runs, and
+post-push API checks are retained in the canonical publication evidence linked
+above. A listed incubation repository remains subordinate to AUTO_ROVER and
+has no tag, release, or independent release authority.
 
 ## Common export rules
 
@@ -191,7 +200,7 @@ export is approved.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-core` (planned, not created) |
+| Target repository | [niuma-phd/auto-rover-core](https://github.com/niuma-phd/auto-rover-core) (public incubation source; published and post-push verified) |
 | ROS package | `auto_rover_core` |
 | Source path | `src/core/auto_rover_core/**` |
 | Test allowlist | `tests/core/test_core.cpp` |
@@ -225,7 +234,7 @@ vehicle backend, configuration, route, and cross-package integration test.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-interfaces` (planned, not created) |
+| Target repository | [niuma-phd/auto-rover-interfaces](https://github.com/niuma-phd/auto-rover-interfaces) (public incubation source; published and post-push verified) |
 | ROS package | `auto_rover_interfaces` |
 | Source path | `src/interfaces/auto_rover_interfaces/**` |
 | Test allowlist | `tests/interfaces/test_ros_contract_files.py` |
@@ -259,7 +268,7 @@ conversions rather than message source contracts.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-ros1-conversions` (planned, not created) |
+| Target repository | [niuma-phd/auto-rover-ros1-conversions](https://github.com/niuma-phd/auto-rover-ros1-conversions) (public incubation source; published and post-push verified) |
 | ROS package | `auto_rover_ros1_conversions` |
 | Source path | `src/interfaces/auto_rover_ros1_conversions/**` |
 | Test allowlist | `tests/interfaces/test_ros1_conversions.cpp` |
@@ -290,7 +299,7 @@ dependencies or canonical evidence, not exported source for this repository.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-planning` (planned, not created) |
+| Target repository | `niuma-phd/auto-rover-planning` (blocked; not created pending explicit repository-owner acceptance of Proposed ADR 0006) |
 | ROS package | `auto_rover_planning` |
 | Source path | `src/planning/auto_rover_planning/**` |
 | Test allowlist | `tests/planning/test_planning.cpp`; `tests/ros_wrappers/test_planning_wrapper_contract.py` |
@@ -313,6 +322,11 @@ route IDs, 256-byte frame/profile/generated-trajectory IDs, 2,048 input
 waypoints, and 4,096 total output points. A synthetic YAML snippet may be written
 for documentation, but no vehicle route or known map is copied from bringup.
 
+Publication is blocked while ADR 0006 remains Proposed. Its resource envelope
+affects the planning contract and therefore requires explicit repository-owner
+acceptance before this target repository may be created or pushed; acceptance
+is not inferred from approval of the other six exports.
+
 Build and test acceptance requires the pinned dependency workspace, yaml-cpp
 revision check, execution of `auto_rover_planning_tests`, the package-specific
 ROS wrapper contract test, malformed/non-finite/duplicate-key and resource-limit
@@ -326,7 +340,7 @@ cross-package full-loop test.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-control` (planned, not created) |
+| Target repository | [niuma-phd/auto-rover-control](https://github.com/niuma-phd/auto-rover-control) (public incubation source; published and post-push verified) |
 | ROS package | `auto_rover_control` |
 | Source path | `src/control/auto_rover_control/**` |
 | Test allowlist | `tests/control/test_pure_pursuit.cpp`; `tests/ros_wrappers/test_control_wrapper_contract.py` |
@@ -369,7 +383,7 @@ tests.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-safety` (planned, not created) |
+| Target repository | [niuma-phd/auto-rover-safety](https://github.com/niuma-phd/auto-rover-safety) (public incubation source; published and post-push verified) |
 | ROS package | `auto_rover_safety` |
 | Source path | `src/safety/auto_rover_safety/**` |
 | Test allowlist | `tests/safety/test_safety.cpp` |
@@ -401,7 +415,7 @@ or braking claims.
 
 | Field | Decision |
 |---|---|
-| Target repository | `niuma-phd/auto-rover-vehicle` (planned, not created) |
+| Target repository | [niuma-phd/auto-rover-vehicle](https://github.com/niuma-phd/auto-rover-vehicle) (public incubation source; published and post-push verified) |
 | ROS package | `auto_rover_vehicle` |
 | Source path | `src/vehicle/auto_rover_vehicle/**` |
 | Test allowlist | `tests/vehicle/test_vehicle.cpp`; `tests/vehicle_ros/test_vehicle_execution_core.cpp`; `tests/vehicle_ros/test_vehicle_execution_node_contract.py` |
