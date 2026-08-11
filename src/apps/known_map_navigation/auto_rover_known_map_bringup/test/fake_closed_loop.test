@@ -1,0 +1,21 @@
+<launch>
+  <!-- The production-default stack and the explicit test-only opt-in stack
+       are isolated so one rostest can prove both sides of the safety gate. -->
+  <group ns="default_disabled">
+    <include file="$(find auto_rover_known_map_bringup)/launch/known_map_fake.launch" />
+  </group>
+
+  <group ns="test_enabled">
+    <include file="$(find auto_rover_known_map_bringup)/launch/known_map_fake.launch">
+      <arg name="actuation_enabled" value="true" />
+    </include>
+  </group>
+
+  <test pkg="auto_rover_known_map_bringup"
+        type="fake_closed_loop_rostest.py"
+        test-name="fake_closed_loop_rostest"
+        time-limit="45.0">
+    <param name="disabled_namespace" value="/default_disabled" />
+    <param name="enabled_namespace" value="/test_enabled" />
+  </test>
+</launch>

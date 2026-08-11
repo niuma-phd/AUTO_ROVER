@@ -1,0 +1,13 @@
+world_frame: camera_init
+control_frame: rear_axle_center
+lookahead_min_m: 0.40
+lookahead_max_m: 0.80
+lookahead_speed_gain_s: 0.50
+goal_position_tolerance_m: 0.08
+standstill_speed_threshold_mps: 0.01
+localization_freshness_ns: 200000000
+trajectory_freshness_ns: 300000000
+chassis_freshness_ns: 200000000
+motion_valid_for_ns: 100000000
+publish_period_s: 0.05
+scope: software_fixture_values_not_phase1_acceptance

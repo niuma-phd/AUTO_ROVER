@@ -62,3 +62,8 @@ authority merely by contributing to the change.
 The [documentation index](../README.md) defines authority precedence. The newest
 relevant accepted ADR wins over the approved architecture baseline, and any
 conflict must be repaired rather than left for readers to reconcile.
+
+## Records
+
+- [ADR 0001: NUC Ackermann phase-1 contracts and safety boundary](0001-nuc-ackermann-phase1-contracts-and-safety.md)
+- [ADR 0002: Wheeltec experimental raw-profile capture boundary](0002-wheeltec-experimental-raw-profile-capture.md)

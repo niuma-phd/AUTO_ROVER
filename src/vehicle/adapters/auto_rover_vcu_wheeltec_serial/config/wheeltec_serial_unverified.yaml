@@ -1,0 +1,55 @@
+status: UNVERIFIED
+
+# Formal execution remains inert unless every independent gate is explicit.
+real_device_enabled: false
+actuation_enabled: false
+unverified_protocol_acknowledged: false
+physical_device_opt_in: false
+actuation_opt_in: false
+readiness_gate_passed: false
+external_or_durable_estop_strategy_approved: false
+
+physical_backend:
+  device_path: ""
+  # ROS XML-RPC has no null type. These sentinels are accepted only while the
+  # real backend is disabled and are rejected before an enabled physical open.
+  expected_device_major: -1
+  expected_device_minor: -1
+  expected_owner_uid: -1
+  expected_group_gid: -1
+  expected_usb_vendor_id: ""
+  expected_usb_product_id: ""
+  expected_usb_serial: ""
+  baud: 115200
+  serial_format_source_assumption: 8N1_no_flow
+  command_layout_source_assumption: wheeltec_11_byte_candidate
+  feedback_layout_source_assumption: wheeltec_24_byte_candidate
+
+codec:
+  # Explicit Phase-1 commissioning ceiling. The generic codec accepts only a
+  # finite caller-supplied limit in the exclusive range 0 < v < 6.0 m/s.
+  max_forward_speed_mps: 0.50
+  max_abs_curvature_inv_m: 1.0526315789473684
+
+runtime:
+  cycle_period_s: 0.02
+  max_command_age_ns: 100000000
+  fresh_commands_required: 3
+  zero_retry_interval_ns: 20000000
+  max_zero_write_attempts: 3
+  read_timeout_ns: 1000000
+  drain_read_timeout_ns: 1000000
+  maximum_drain_reads: 64
+  maximum_feedback_age_ns: 150000000
+  write_timeout_ns: 10000000
+  maximum_normal_write_gap_ns: 100000000
+  maximum_step_duration_ns: 50000000
+  control_allowed_receipts_required: 5
+  control_allowed_minimum_span_ns: 200000000
+
+feedback:
+  source_timestamp_available: false
+  command_ack_available: false
+  control_enabled_available: false
+  fault_state_available: false
+  flag_stop_semantics: current_cycle_backend_inhibit_only

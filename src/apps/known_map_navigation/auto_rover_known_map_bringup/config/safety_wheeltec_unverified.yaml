@@ -1,0 +1,25 @@
+# UNVERIFIED physical-backend integration candidate. These software timeout
+# values exercise the fail-closed implementation; they are not a Phase-1
+# physical acceptance profile and do not authorize motion.
+safety_supervisor:
+  actuation_enabled: false
+  fresh_recovery_count: 3
+  state_valid_for_s: 0.10
+  reset_service_enabled: false
+  authorized_reset_operator_id: ""
+
+command_guard:
+  world_frame: camera_init
+  localization_freshness_s: 0.20
+  trajectory_freshness_s: 0.30
+  motion_freshness_s: 0.15
+  # The 0.15 s receipt limit is a raised-wheel diagnostic candidate supported
+  # by the observed ~20 Hz stream. It is not a loaded-vehicle acceptance value.
+  chassis_freshness_s: 0.15
+  safety_freshness_s: 0.15
+  fresh_recovery_count: 3
+
+vehicle_manager:
+  command_valid_for_s: 0.10
+
+scope: UNVERIFIED_default_disabled_not_phase1_acceptance

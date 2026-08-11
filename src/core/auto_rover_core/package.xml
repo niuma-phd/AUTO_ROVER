@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>auto_rover_core</name>
+  <version>0.1.0</version>
+  <description>ROS-independent AUTO_ROVER phase-1 domain values and validation.</description>
+  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
+  <license>All rights reserved; public license decision pending</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <export />
+</package>

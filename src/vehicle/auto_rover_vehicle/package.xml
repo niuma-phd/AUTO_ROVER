@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>auto_rover_vehicle</name>
+  <version>0.1.0</version>
+  <description>Fail-closed vehicle execution with a deterministic fake VCU ROS 1 boundary.</description>
+  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
+  <license>All rights reserved; public license decision pending</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>auto_rover_core</build_depend>
+  <build_depend>auto_rover_interfaces</build_depend>
+  <build_depend>auto_rover_ros1_conversions</build_depend>
+  <build_depend>auto_rover_safety</build_depend>
+  <build_depend>roscpp</build_depend>
+  <build_depend>std_srvs</build_depend>
+  <build_export_depend>auto_rover_core</build_export_depend>
+  <build_export_depend>auto_rover_interfaces</build_export_depend>
+  <build_export_depend>auto_rover_ros1_conversions</build_export_depend>
+  <build_export_depend>auto_rover_safety</build_export_depend>
+  <build_export_depend>roscpp</build_export_depend>
+  <build_export_depend>std_srvs</build_export_depend>
+  <exec_depend>auto_rover_core</exec_depend>
+  <exec_depend>auto_rover_interfaces</exec_depend>
+  <exec_depend>auto_rover_ros1_conversions</exec_depend>
+  <exec_depend>auto_rover_safety</exec_depend>
+  <exec_depend>roscpp</exec_depend>
+  <exec_depend>std_srvs</exec_depend>
+  <export />
+</package>

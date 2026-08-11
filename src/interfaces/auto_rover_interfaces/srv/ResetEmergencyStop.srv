@@ -1,0 +1,8 @@
+string operator_id
+uint64 latch_generation
+bool conditions_cleared_acknowledged
+---
+bool success
+string reason
+uint8 safety_mode
+uint64 current_latch_generation

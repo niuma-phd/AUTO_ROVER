@@ -1,0 +1,8 @@
+schema_version: 1
+frame_id: camera_init
+route_id: commissioning_route_01
+plan_version: 1
+loop: false
+waypoints:
+  - {x_m: 0.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}
+  - {x_m: 2.0, y_m: 0.0, yaw_rad: 0.0, speed_mps: 0.50}

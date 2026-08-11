@@ -1,0 +1,27 @@
+# Every duration in this file is a deterministic fake-loop fixture. Real timeout,
+# stop-time, and stop-distance acceptance values remain unset until bench evidence.
+safety_supervisor:
+  fresh_recovery_count: 3
+  state_valid_for_s: 0.10
+  reset_service_enabled: false
+  authorized_reset_operator_id: ""
+
+command_guard:
+  world_frame: camera_init
+  localization_freshness_s: 0.20
+  trajectory_freshness_s: 0.30
+  motion_freshness_s: 0.15
+  chassis_freshness_s: 0.20
+  safety_freshness_s: 0.15
+  fresh_recovery_count: 3
+
+vehicle_manager:
+  command_valid_for_s: 0.10
+
+fake_vcu:
+  command_watchdog_s: 0.15
+  feedback_period_s: 0.05
+  fresh_recovery_count: 3
+  max_accel_mps2: 0.20
+
+scope: deterministic_fake_only_not_vehicle_acceptance

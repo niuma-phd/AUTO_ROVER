@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>auto_rover_localization</name>
+  <version>0.1.0</version>
+  <description>ROS-independent FAST-LIVO2 adaptation with a thin ROS 1 edge.</description>
+  <maintainer email="maintainer@example.invalid">AUTO_ROVER maintainers</maintainer>
+  <license>All rights reserved; public license decision pending</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>auto_rover_core</depend>
+  <depend>auto_rover_interfaces</depend>
+  <depend>auto_rover_ros1_conversions</depend>
+  <depend>nav_msgs</depend>
+  <depend>roscpp</depend>
+  <export />
+</package>

@@ -1,0 +1,84 @@
+schema_version: 1
+status: draft_unapproved
+profile_id: null
+profile_git_commit: null
+profile_blob_sha256: null
+
+approvals:
+  decision_authority: null
+  safety_reviewer: null
+  approval_record: null
+
+revisions:
+  auto_rover_commit: null
+  vehicle_profile_revision: null
+  vcu_adapter_revision: null
+  vcu_hardware_revision: null
+  vcu_firmware_revision: null
+  fast_livo2_revision: 3df020182aee52d81fd1a6b543bfb611c46d11bc
+  dependency_lock_revision: null
+
+configuration:
+  route_fixture_revision: null
+  map_revision: null
+  localization_config_revision: null
+  vehicle_config_revision: null
+  safety_config_revision: null
+
+test_envelope:
+  planned_operator_role: null
+  planned_test_window: null
+  test_area: null
+  surface_conditions: null
+  environmental_conditions: null
+  physical_estop_procedure: null
+
+fixed_software_limits:
+  commissioning_forward_target_mps: 0.50
+  max_forward_speed_mps: 0.50
+  max_longitudinal_accel_mps2: 0.20
+  operational_min_turning_radius_m: 0.95
+  reverse_supported: false
+
+acceptance_criteria:
+  planned_run_count: null
+  aborted_run_treatment: null
+  route_completion_rate:
+    calculation: null
+    minimum: null
+  lateral_error:
+    frame: null
+    sampling_interval_s: null
+    statistic: null
+    maximum_m: null
+  heading_error:
+    convention: null
+    sampling_interval_s: null
+    statistic: null
+    maximum_rad: null
+  command_rate_and_age:
+    expected_rate_hz: null
+    maximum_receipt_age_s: null
+    measurement_clock: monotonic
+  stale_input_response:
+    injected_inputs: null
+    maximum_detection_time_s: null
+    maximum_response_time_s: null
+  stop:
+    initial_condition: null
+    standstill_definition: null
+    maximum_time_s: null
+    maximum_distance_m: null
+  direction_change:
+    speed_threshold_mps: null
+    measured_speed_source: null
+    tolerance_mps: null
+  hold_release:
+    required_conditions: null
+    maximum_input_age_s: null
+
+measurement_methods:
+  localization_and_route_error: null
+  command_and_feedback_capture: null
+  stop_time_and_distance: null
+  deadband_and_hysteresis: null

@@ -1,0 +1,68 @@
+status: UNVERIFIED
+
+# Independent deployment gates. Every gate is false in the repository. Merely
+# changing a boolean is not readiness evidence or authorization for a test.
+real_device_enabled: false
+actuation_enabled: false
+physical_device_opt_in: false
+actuation_opt_in: false
+readiness_gate_passed: false
+external_or_durable_estop_strategy_approved: false
+unverified_protocol_acknowledged: false
+
+physical_backend:
+  device_path: ""
+  # ROS XML-RPC has no null type. Negative numeric and empty string sentinels
+  # remain incomplete and must be rejected whenever real_device_enabled=true.
+  expected_device_major: -1
+  expected_device_minor: -1
+  expected_owner_uid: -1
+  expected_group_gid: -1
+  expected_usb_vendor_id: ""
+  expected_usb_product_id: ""
+  expected_usb_serial: ""
+  baud: 115200
+  serial_format_source_assumption: 8N1_no_flow
+  command_layout_source_assumption: wheeltec_11_byte_candidate
+  feedback_layout_source_assumption: wheeltec_24_byte_candidate
+
+codec:
+  # Caller-supplied generic-codec limit: finite and strictly 0 < v < 6.0 m/s.
+  # The selected Phase-1 profile remains explicitly limited to 0.50 m/s.
+  max_forward_speed_mps: 0.50
+  max_abs_curvature_inv_m: 1.0526315789473684
+
+runtime:
+  cycle_period_s: 0.02
+  max_command_age_ns: 100000000
+  fresh_commands_required: 3
+  zero_retry_interval_ns: 20000000
+  max_zero_write_attempts: 3
+  read_timeout_ns: 1000000
+  drain_read_timeout_ns: 1000000
+  maximum_drain_reads: 64
+  maximum_feedback_age_ns: 150000000
+  write_timeout_ns: 10000000
+  maximum_normal_write_gap_ns: 100000000
+  maximum_step_duration_ns: 50000000
+  control_allowed_receipts_required: 5
+  control_allowed_minimum_span_ns: 200000000
+
+feedback:
+  # Raised-wheel observation only; not a deployment acceptance value.
+  feedback_rate_hz: 20.0
+  candidate_receipt_freshness_ms: 150
+  source_timestamp_available: false
+  command_ack_available: false
+  control_enabled_available: false
+  fault_state_available: false
+  # FlagStop is a current-cycle backend inhibit only. It is not an ACK,
+  # autonomous enable, normalized fault state, or latched emergency stop.
+  flag_stop_semantics: current_cycle_backend_inhibit_only
+
+unverified_capabilities:
+  hardware_watchdog_available: unknown
+  physical_safe_state: unknown
+  command_rate_hz: unknown
+  # Loaded standstill acceptance remains unknown; no threshold is invented.
+  standstill_threshold_mps: unknown

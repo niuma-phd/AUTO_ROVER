@@ -1,0 +1,58 @@
+<launch>
+  <!-- Explicit UNVERIFIED Wheeltec backend candidate. This is separate from
+       vehicle_execution.launch (fake backend) and is inert by default. The
+       repository defaults below neither open a device nor authorize motion. -->
+  <arg name="safety_config"
+       default="$(find auto_rover_known_map_bringup)/config/safety_wheeltec_unverified.yaml" />
+  <arg name="vehicle_runtime_config"
+       default="$(find auto_rover_known_map_bringup)/config/vehicle_runtime.yaml" />
+  <arg name="wheeltec_backend_config"
+       default="$(find auto_rover_known_map_bringup)/config/wheeltec_serial_unverified.yaml" />
+
+  <arg name="real_device_enabled" default="false" />
+  <arg name="actuation_enabled" default="false" />
+  <arg name="unverified_protocol_acknowledged" default="false" />
+  <arg name="physical_device_opt_in" default="false" />
+  <arg name="actuation_opt_in" default="false" />
+  <arg name="readiness_gate_passed" default="false" />
+  <arg name="external_or_durable_estop_strategy_approved" default="false" />
+  <arg name="device_path" default="" />
+  <!-- Generic codec accepts only finite 0 < v < 6.0 m/s. This selected
+       Phase-1 application explicitly remains at 0.50 m/s. -->
+  <arg name="max_forward_speed_mps" default="0.50" />
+
+  <node pkg="auto_rover_vcu_wheeltec_serial"
+        type="wheeltec_vehicle_execution_node"
+        name="wheeltec_vehicle_execution"
+        output="screen"
+        required="true"
+        clear_params="true">
+    <rosparam command="load" file="$(arg safety_config)" />
+    <rosparam command="load" file="$(arg vehicle_runtime_config)" />
+    <rosparam command="load" file="$(arg wheeltec_backend_config)" />
+
+    <!-- Explicit launch arguments override the inert file defaults. All gates
+         remain independent; setting one never implies any other gate. -->
+    <param name="real_device_enabled"
+           value="$(arg real_device_enabled)" type="bool" />
+    <param name="actuation_enabled"
+           value="$(arg actuation_enabled)" type="bool" />
+    <param name="safety_supervisor/actuation_enabled"
+           value="$(arg actuation_enabled)" type="bool" />
+    <param name="readiness_gate_passed"
+           value="$(arg readiness_gate_passed)" type="bool" />
+    <param name="external_or_durable_estop_strategy_approved"
+           value="$(arg external_or_durable_estop_strategy_approved)"
+           type="bool" />
+    <param name="unverified_protocol_acknowledged"
+           value="$(arg unverified_protocol_acknowledged)" type="bool" />
+    <param name="physical_device_opt_in"
+           value="$(arg physical_device_opt_in)" type="bool" />
+    <param name="actuation_opt_in"
+           value="$(arg actuation_opt_in)" type="bool" />
+    <param name="physical_backend/device_path"
+           value="$(arg device_path)" type="str" />
+    <param name="codec/max_forward_speed_mps"
+           value="$(arg max_forward_speed_mps)" type="double" />
+  </node>
+</launch>

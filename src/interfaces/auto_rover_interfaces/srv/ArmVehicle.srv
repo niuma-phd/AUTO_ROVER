@@ -1,0 +1,7 @@
+string operator_id
+uint64 safety_generation
+bool arm
+---
+bool success
+string reason
+uint8 safety_mode

@@ -1,0 +1,64 @@
+schema_version: 1
+status: uncollected
+result_set_id: null
+acceptance_profile_id: null
+acceptance_profile_git_commit: null
+acceptance_profile_blob_sha256: null
+
+actual_context:
+  auto_rover_commit: null
+  vcu_adapter_revision: null
+  vcu_hardware_revision: null
+  vcu_firmware_revision: null
+  operator: null
+  timestamp_utc: null
+  test_area: null
+  surface_conditions: null
+  environmental_conditions: null
+
+protocol_observations:
+  command_layout_verified: null
+  feedback_layout_verified: null
+  command_rate_hz: null
+  feedback_rate_hz: null
+  controller_watchdog_s: null
+  disconnect_safe_state: null
+  reconnect_behavior: null
+  acknowledgement_semantics: null
+
+vehicle_observations:
+  source_to_rear_extrinsic: null
+  forward_sign_verified: null
+  left_curvature_sign_verified: null
+  actual_first_nonzero_command_mps: null
+  measured_start_deadband_mps: null
+  measured_stop_deadband_mps: null
+  measured_hysteresis_mps: null
+  measured_minimum_turning_radius_m: null
+
+runs: []
+
+aggregate_results:
+  route_completion_rate: null
+  lateral_error: null
+  heading_error: null
+  command_rate_and_age: null
+  stale_input_response: null
+  stop_time_and_distance: null
+  direction_change: null
+  hold_release: null
+
+artifacts:
+  raw_serial_capture: null
+  ros_bag: null
+  calculations: null
+  logs: null
+  checksums: null
+
+disposition:
+  every_criterion_passed: null
+  decision_authority: null
+  safety_reviewer: null
+  decision_record: null
+  anomalies: []
+  residual_risks: []

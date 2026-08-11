@@ -1,0 +1,14 @@
+<launch>
+  <!-- The default real configuration intentionally fails closed until the
+       source-to-rear extrinsic and live freshness limit are measured. -->
+  <arg name="localization_config"
+       default="$(find auto_rover_known_map_bringup)/config/localization.yaml" />
+
+  <node pkg="auto_rover_localization"
+        type="fast_livo_odometry_node"
+        name="fast_livo_odometry_adapter"
+        output="screen"
+        required="true">
+    <rosparam command="load" file="$(arg localization_config)" />
+  </node>
+</launch>

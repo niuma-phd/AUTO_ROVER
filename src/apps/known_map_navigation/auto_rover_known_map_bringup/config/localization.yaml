@@ -1,0 +1,25 @@
+source:
+  topic: /aft_mapped_to_init
+  message_type: nav_msgs/Odometry
+  expected_frame_id: camera_init
+  expected_child_frame_id: aft_mapped
+  revision: 3df020182aee52d81fd1a6b543bfb611c46d11bc
+  timestamp_semantics: PUBLISH_TIME
+  measurement_time_available: false
+  pose_reference_point: imu_origin_math_inferred
+  twist_available: false
+  covariance_available: false
+  # Unknown until live acceptance evidence exists. This intentionally makes the
+  # real localization wrapper reject its configuration instead of guessing.
+  freshness_limit_s: 0.0
+
+extrinsic:
+  known: false
+  reference: source_or_imu_to_rear_axle_center
+  translation: {x: 0.0, y: 0.0, z: 0.0}
+  rotation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
+
+readiness:
+  source_to_vehicle_axes_verified: false
+  live_rate_verified: false
+  live_latency_verified: false
